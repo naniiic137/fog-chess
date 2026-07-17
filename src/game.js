@@ -287,10 +287,12 @@ class FogChessGame {
   }
 
   /**
-   * rematch(color). Returns { both, by }. When both sides have requested, the
-   * match state is reset to a fresh setup phase (colors retained).
+   * requestRematch(color). Returns { both, by }. When both sides have requested,
+   * the match state is reset to a fresh setup phase (colors retained).
+   * NB: named requestRematch (not rematch) so it does not collide with the
+   * `this.rematch` state field, which would shadow this method.
    */
-  rematch(color) {
+  requestRematch(color) {
     if (this.phase !== 'ended') return { both: false, by: color, ignored: true };
     this.rematch[FogChessGame.keyOf(color)] = true;
     if (this.rematch.white && this.rematch.black) {

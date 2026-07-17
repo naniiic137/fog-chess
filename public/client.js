@@ -441,8 +441,11 @@
     if (over.fen) reasonLine += "   |   FEN: " + over.fen;
     $("endReason").textContent = reasonLine;
 
-    // full reveal — both colors real types
-    renderBoard($("endBoard"), over.fullBoard, true);
+    // Normally a full reveal (both colors' real types) from gameOver.fullBoard.
+    // Fallback path passes a filtered board with revealed:false so the fog holds.
+    var endBoard = over.fullBoard || over.board;
+    var endRevealed = over.revealed !== false && !!over.fullBoard;
+    renderBoard($("endBoard"), endBoard, endRevealed);
     if (lastState) renderMoveLog($("endMoveLog"), lastState.moveLog);
     $("rematchStatus").textContent = "";
   }
@@ -556,8 +559,10 @@
       case "ended":
         // gameOver event carries the full reveal; if it already ran we stay on end.
         if (document.body.getAttribute("data-screen") !== "end") {
-          // fallback if gameOver not yet received: render filtered board result
-          if (state.result) renderEnd(Object.assign({ fullBoard: state.board }, state.result));
+          // fallback if gameOver not yet received: render the FILTERED board
+          // (revealed:false) so opponent cells stay {occupied:true} and never hit
+          // the reveal path. The gameOver event that follows does the full reveal.
+          if (state.result) renderEnd(Object.assign({ board: state.board, revealed: false }, state.result));
           setScreen("end");
         }
         break;

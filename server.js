@@ -166,7 +166,7 @@ io.on('connection', (socket) => {
   socket.on('rematch', () => {
     const color = game.colorOf(socket.id);
     if (!color) return;
-    const res = game.rematch(color);
+    const res = game.requestRematch(color);
     if (res.ignored) return;
     if (res.both) {
       // Reset complete: fresh setup state to both (colors retained).
