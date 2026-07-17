@@ -52,6 +52,11 @@ function emitToBoth(event, payload) {
   if (b) b.emit(event, payload);
 }
 
+/** Broadcast the shared `config` (negotiation state) to both players. */
+function emitConfig() {
+  emitToBoth('config', game.buildConfigPayload());
+}
+
 // ---- connection handling --------------------------------------------------
 
 io.on('connection', (socket) => {
@@ -63,7 +68,7 @@ io.on('connection', (socket) => {
   }
 
   socket.emit('assigned', assigned);
-  game.maybeStartSetup();
+  const enteredConfig = game.maybeStartConfig();
 
   const oppColor = assigned.color === 'w' ? 'b' : 'w';
   if (!game.socketOf(oppColor)) {
@@ -71,6 +76,35 @@ io.on('connection', (socket) => {
   }
   // Authoritative snapshot to both (opponent, if present, learns we connected).
   emitState();
+  // On entering the config phase (both slots filled), broadcast the live config.
+  if (enteredConfig) emitConfig();
+
+  // ---- config: propose / agree (house-rules negotiation) -----------------
+  socket.on('proposeConfig', (payload) => {
+    const color = game.colorOf(socket.id);
+    if (!color) return;
+    const res = game.proposeConfig(color, payload && payload.config);
+    if (!res.ok) return;
+    emitConfig();
+    emitState();
+  });
+
+  socket.on('agreeConfig', (payload) => {
+    const color = game.colorOf(socket.id);
+    if (!color) return;
+    const version = payload ? payload.version : undefined;
+    const res = game.agreeConfig(color, version);
+    if (res.stale) {
+      // Stale agree: resync the client with the current proposal.
+      socket.emit('config', game.buildConfigPayload());
+      return;
+    }
+    if (!res.ok && !res.started && !res.invalid) return;
+    // Whether we advanced to setup, stayed (invalid), or just recorded an agree,
+    // re-broadcast config; and push fresh state when the phase changed.
+    emitConfig();
+    if (res.started) emitState();
+  });
 
   // ---- setup: submitArrangement ------------------------------------------
   socket.on('submitArrangement', (payload) => {
@@ -169,8 +203,9 @@ io.on('connection', (socket) => {
     const res = game.requestRematch(color);
     if (res.ignored) return;
     if (res.both) {
-      // Reset complete: fresh setup state to both (colors retained).
+      // Reset complete: both return to a FRESH config phase (colors retained).
       emitState();
+      emitConfig();
     } else {
       emitToBoth('rematchPending', { by: res.by });
     }

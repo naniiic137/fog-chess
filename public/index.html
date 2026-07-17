@@ -7,6 +7,7 @@
   <header id="topbar">
     <h1>Fog Chess</h1>
     <div id="youAre" class="badge hidden"></div>
+    <div id="modeBadge" class="badge hidden"></div>
     <div id="topActions">
       <label class="sizeCtl">Board
         <select id="boardSize">
@@ -35,21 +36,76 @@
     </div>
   </section>
 
+  <!-- ===================== CONFIG (house-rules negotiation) ===================== -->
+  <section id="screen-config" class="screen">
+    <div class="configWrap">
+      <div class="configMain">
+        <h2>House rules</h2>
+        <p class="hint">
+          Agree on the rules with your opponent before the game begins. Either of
+          you can change any setting — <b>any change resets both agreements</b>, so
+          you both re-confirm the final rules.
+        </p>
+
+        <div class="cfgGroup">
+          <h3>Mode</h3>
+          <div class="modeToggle">
+            <button id="modeClassic" class="modeBtn">Classic</button>
+            <button id="modeChaos" class="modeBtn">Chaos</button>
+          </div>
+          <p id="modeDesc" class="hint small"></p>
+        </div>
+
+        <div id="chaosOptions" class="chaosOptions">
+          <div class="cfgGroup">
+            <h3>Board size</h3>
+            <div id="dimsPicker" class="dimsPicker"></div>
+          </div>
+          <div class="cfgGroup">
+            <h3>Fairy pieces</h3>
+            <p class="hint small">Enable exotic pieces, then add them to the roster below.</p>
+            <div id="fairyToggles" class="fairyToggles"></div>
+          </div>
+          <div class="cfgGroup">
+            <h3>Roster (both armies share it)</h3>
+            <p class="hint small">Set how many of each piece. At least one king is required; ban a type to remove it entirely.</p>
+            <div id="rosterEditor" class="rosterEditor"></div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="configSide">
+        <h3>Current proposal</h3>
+        <div id="cfgSummary" class="cfgSummary"></div>
+        <div id="cfgError" class="statusLine err"></div>
+        <div class="agreeRow">
+          <div id="agreedYou" class="agreeChip">You: —</div>
+          <div id="agreedOpp" class="agreeChip">Opponent: —</div>
+        </div>
+        <div id="cfgVersion" class="hint small"></div>
+        <button id="agreeBtn" class="btn primary">Agree</button>
+        <p class="hint small">
+          Both players must Agree to the <em>same</em> rules to start. Editing any
+          setting clears both agreements.
+        </p>
+      </aside>
+    </div>
+  </section>
+
   <!-- ===================== SETUP ===================== -->
   <section id="screen-setup" class="screen">
     <div class="setupWrap">
       <div class="setupLeft">
         <h2>Arrange your pieces</h2>
-        <p class="hint">
-          Click a piece in the tray to pick it up, then click any of your two
-          home-rank squares to place it — place several of the same type by
-          clicking again. Click a placed piece to remove it. (Dragging still
-          works too.) Full freedom — you may even put pawns on your back rank.
+        <p id="setupHint" class="hint">
+          Click a piece in the tray to pick it up, then click any of your home
+          squares to place it — place several of the same type by clicking again.
+          Click a placed piece to remove it. (Dragging still works too.) Full
+          freedom — you may even put pawns on your back rank.
         </p>
         <p class="hint small">
-          Note: a pawn placed on its own back rank cannot double-step; it
-          advances one square at a time until it reaches its 2nd rank. This is
-          intended.
+          Note: a pawn placed on its own back rank cannot double-step; it advances
+          one square at a time until it reaches its 2nd rank. This is intended.
         </p>
         <div id="setupBoard" class="board setupGrid"></div>
         <div class="setupControls">
@@ -87,9 +143,9 @@
         <div class="pinLegend">
           <h4>Your pins</h4>
           <p class="hint small">
-            Click an opponent (grey <span class="qmark"></span>) square to
-            record a private guess. Pins are never sent to your opponent and
-            fade automatically when the square empties.
+            Click an opponent (grey <span class="qmark"></span>) square to record a
+            private guess. Pins are never sent to your opponent and fade
+            automatically when the square empties.
           </p>
           <ul id="pinList" class="pinList"></ul>
         </div>
@@ -122,12 +178,7 @@
   <div id="promoModal" class="modal hidden">
     <div class="modalCard">
       <h3>Promote to</h3>
-      <div class="promoChoices">
-        <button class="promoBtn" data-piece="q">♕ Queen</button>
-        <button class="promoBtn" data-piece="r">♖ Rook</button>
-        <button class="promoBtn" data-piece="b">♗ Bishop</button>
-        <button class="promoBtn" data-piece="n">♘ Knight</button>
-      </div>
+      <div id="promoChoices" class="promoChoices"></div>
     </div>
   </div>
 
