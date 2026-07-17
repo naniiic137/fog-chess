@@ -58,9 +58,39 @@ board is never transmitted.
   square empties.
 - **Click-to-place or drag-and-drop** setup.
 - **Adjustable board size** (Small / Normal / Large / Huge), saved per browser.
-- **Resign** and **rematch** (rematch returns both players to a fresh setup, colors kept).
+- **Resign** and **rematch** (rematch returns both players to the house-rules screen, colors kept).
 - **Full reveal** of both boards at game end.
+- **Two game modes** — **Classic** (standard rules, real checkmate) and **Chaos** (see below).
+- **House-rules negotiation** — before each game both players agree on the mode and, in
+  chaos, the board size, piece counts, bans, and which wild pieces are allowed.
 - No build step, no database, no accounts — just `npm install && npm start`.
+
+### Chaos mode 🌪️
+
+A second, "go wild" mode that both players opt into on the house-rules screen. Instead of
+checkmate, **you win by capturing the enemy king** — which changes everything it's allowed to
+do:
+
+- **Custom piece counts** — field multiple queens, multiple kings, extra knights, whatever
+  you both agree to. (You need at least one king; capture *all* enemy kings to win.)
+- **Piece bans** — either player proposes banning any piece type; it applies only when the
+  other agrees, and that type is removed from both armies for the game.
+- **Wild / fairy pieces** — enable exotic long-range pieces:
+  | Piece | Moves like |
+  |-------|-----------|
+  | **Amazon** | Queen **+** Knight |
+  | **Chancellor** | Rook **+** Knight |
+  | **Archbishop** | Bishop **+** Knight |
+  | **Nightrider** | a Knight that keeps riding in the same knight-direction (long range) |
+  | **Camel** | a longer (1,3) knight-style leaper |
+  | **Wizard** | Camel **+** short diagonal steps |
+- **Bigger boards** — play on 8×8, 10×8, or 10×10.
+- Because there's no "check," there's no checkmate or stalemate-by-check: a game ends when a
+  king is captured, or is a draw if the player to move has no legal move.
+
+Your own fairy pieces show as coloured lettered badges; your opponent's pieces — standard or
+fairy — always show as the same neutral hidden token, so the fog holds for the wild pieces
+too.
 
 ---
 
@@ -180,7 +210,14 @@ set PORT=4000 && npm start
 ### 1. Lobby
 When you connect you'll see a "waiting for opponent" screen until the second player joins.
 
-### 2. Setup (secret arrangement)
+### 2. House rules (agree on the game)
+Both players land on the house-rules screen. Pick **Classic** (standard chess rules) or
+**Chaos**. In chaos you can set the board size, per-piece counts, bans, and which fairy pieces
+are enabled. Either player can change any setting — **any change resets both agreements**, so
+you both press **Agree** on the final rules to start. (For a quick standard game, both just
+pick Classic and Agree.)
+
+### 3. Setup (secret arrangement)
 - You see **only your own two home ranks** and a tray of your 16 pieces (8 pawns, 2 rooks,
   2 knights, 2 bishops, 1 queen, 1 king).
 - **To place:** click a piece in the tray to "pick it up," then click a home square to drop
@@ -190,7 +227,7 @@ When you connect you'll see a "waiting for opponent" screen until the second pla
 - Your opponent is arranging their side at the same time — you can't see it.
 - Press **Ready** once all 16 pieces are placed. The game starts when both players are ready.
 
-### 3. Live game
+### 4. Live game
 - White moves first, then players alternate.
 - **Your pieces** show in full. Click one to see its legal destination squares highlighted,
   then click a highlighted square to move.
@@ -204,14 +241,14 @@ When you connect you'll see a "waiting for opponent" screen until the second pla
 - The **move log** shows your own moves in full and your opponent's as anonymized entries
   like `unknown piece: e7→e5`.
 
-### 4. Pins (private guesses)
+### 5. Pins (private guesses)
 - Click any occupied **opponent** square to attach a private guess (a piece type or free
   text). It shows as a small purple tag only **you** can see.
 - Pins are **never** sent to your opponent.
 - When the piece leaves that square, the pin fades away automatically. Re-pin wherever you
   think it went.
 
-### 5. End of game
+### 6. End of game
 - On checkmate, stalemate, draw, or resignation, **both boards are fully revealed** and the
   result is shown.
 - Click **Rematch** to play again (both must accept); you return to a fresh setup phase with
@@ -246,9 +283,10 @@ fog-chess/
 ├── server.js              # Express + Socket.io server; connection & event handling; LAN URL printout
 ├── package.json           # Dependencies and the "start" script
 ├── src/
-│   ├── game.js            # Game state machine (lobby→setup→playing→ended), rules via chess.js, CONFIG
-│   ├── fen.js             # Builds a chess.js FEN string from the two secret arrangements
-│   └── fog.js             # THE fog filter — the only place hidden-info logic lives
+│   ├── game.js            # Game state machine (lobby→config→setup→playing→ended); routes by mode
+│   ├── chaos.js           # The Chaos variant engine (fairy pieces, king-capture, variable boards)
+│   ├── fen.js             # Builds a chess.js FEN string from the two secret arrangements (classic)
+│   └── fog.js             # THE fog filter — the only place hidden-info logic lives (both modes)
 ├── public/                # Static frontend (served as-is, no build step)
 │   ├── index.html         # Markup for all screens (lobby / setup / game / end) + modals
 │   ├── style.css          # Styling, board grid, pieces, hidden-piece token, pins
@@ -328,13 +366,16 @@ rooms/room codes, spectators, clocks/timers, and internet (non-LAN) play.
 
 ## Roadmap
 
-Planned / requested additions:
+Already shipped: two modes (Classic + Chaos), house-rules negotiation, custom piece counts,
+piece bans, wild/fairy pieces, and bigger boards (see [Chaos mode](#chaos-mode-)).
 
-- **Custom piece counts** — play with more than one queen, extra kings, etc.
-- **Piece bans** — both players agree to ban a piece type for the round; it's greyed out.
-- **Wild / fairy pieces** — new pieces with unusual, long-range movement for chaos modes.
-- **Game modes** — a "Classic" mode (standard rules) alongside a "Chaos" mode.
-- Reconnect handling, multiple rooms, and optional timers.
+Still planned:
+
+- **Reconnect-after-disconnect** handling (currently out of scope — refresh both browsers to
+  restart if someone drops).
+- **Multiple simultaneous rooms / room codes** and **spectators**.
+- **Clocks / timers**.
+- More fairy pieces and preset "chaos packs."
 
 ---
 
