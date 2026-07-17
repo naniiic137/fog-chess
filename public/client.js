@@ -27,6 +27,7 @@
   var prevBoard = null;          // previous filtered board (for pin auto-fade)
   var pins = {};                 // { square: "Queen" | "free text" }
   var placement = {};            // setup: { square: pieceType }
+  var selectedTrayType = null;   // setup: piece type "in hand" (click-to-place)
   var selectedSquare = null;     // playing: currently selected own square
   var currentMoves = [];         // legalMoves entries for selectedSquare
   var lastMove = null;           // { from, to } for highlight
@@ -102,7 +103,11 @@
     });
     squares.forEach(function (s) {
       var cell = makeCell(s);
-      cell.classList.add("dropTargetZone");
+      cell.classList.add("dropTargetZone", "selectable");
+      // click-to-place: clicking the square places the in-hand piece, or removes
+      // the piece already there.
+      cell.addEventListener("click", function () { onSetupSquareClick(s); });
+      // drag-and-drop still supported as a bonus
       cell.addEventListener("dragover", function (ev) {
         ev.preventDefault();
         cell.classList.add("dropTarget");
@@ -116,14 +121,48 @@
         p.addEventListener("dragstart", function (ev) {
           ev.dataTransfer.setData("text/plain", JSON.stringify({ origin: s, type: placement[s] }));
         });
-        p.addEventListener("click", function () { removeFromSquare(s); });
-        p.title = "Click or drag off to remove";
+        // clicking the piece routes to the same square handler (place-over / remove)
+        p.addEventListener("click", function (ev) { ev.stopPropagation(); onSetupSquareClick(s); });
+        p.title = "Click to remove (or replace with the piece in hand)";
         cell.appendChild(p);
       }
       board.appendChild(cell);
     });
     renderTray();
     updateReady();
+    updateInHand();
+  }
+
+  // Click-to-place handler for a home square during setup.
+  function onSetupSquareClick(s) {
+    if (!isHomeSquare(yourColor, s)) return;
+    if (selectedTrayType) {
+      // place / replace with the in-hand type
+      if (remaining(selectedTrayType) <= 0 && placement[s] !== selectedTrayType) {
+        toast("No more " + TYPE_NAME[selectedTrayType] + " left", true);
+        return;
+      }
+      placement[s] = selectedTrayType;
+      // keep the same type in hand for rapid placement until it runs out
+      if (remaining(selectedTrayType) <= 0) selectedTrayType = null;
+      renderSetup();
+    } else if (placement[s]) {
+      // nothing in hand -> clicking a placed piece removes it
+      delete placement[s];
+      renderSetup();
+    }
+  }
+
+  function updateInHand() {
+    var box = $("inHand");
+    if (!box) return;
+    if (selectedTrayType) {
+      box.innerHTML = "In hand: <b>" + GLYPH[yourColor][selectedTrayType] + " " +
+        TYPE_NAME[selectedTrayType] + "</b> — click a square to place. (" +
+        remaining(selectedTrayType) + " left)";
+    } else {
+      box.textContent = "Click a tray piece to pick it up.";
+    }
   }
 
   function placedCounts() {
@@ -142,8 +181,12 @@
     tray.innerHTML = "";
     TRAY_ORDER.forEach(function (type) {
       var rem = remaining(type);
-      var item = el("div", "trayItem" + (rem <= 0 ? " empty" : ""));
-      item.textContent = GLYPH[yourColor][type];
+      var item = el("div", "trayItem" + (rem <= 0 ? " empty" : "") +
+        (selectedTrayType === type ? " selected" : ""));
+      // glyph node so the count doesn't get overwritten
+      var g = el("span");
+      g.textContent = GLYPH[yourColor][type];
+      item.appendChild(g);
       var cnt = el("span", "count");
       cnt.textContent = "x" + rem;
       item.appendChild(cnt);
@@ -152,6 +195,13 @@
         item.addEventListener("dragstart", function (ev) {
           ev.dataTransfer.setData("text/plain", JSON.stringify({ origin: "tray", type: type }));
         });
+        // click-to-pick-up (toggle)
+        item.addEventListener("click", function () {
+          selectedTrayType = (selectedTrayType === type) ? null : type;
+          renderSetup();
+        });
+      } else if (selectedTrayType === type) {
+        selectedTrayType = null;
       }
       tray.appendChild(item);
     });
@@ -595,6 +645,7 @@
 
   function resetForNewGame() {
     placement = {};
+    selectedTrayType = null;
     pins = {};
     prevBoard = null;
     selectedSquare = null;
@@ -616,7 +667,24 @@
     $("setupStatus").textContent = "Submitting…";
   });
   $("autoFillBtn").addEventListener("click", standardSetup);
-  $("clearSetupBtn").addEventListener("click", function () { placement = {}; renderSetup(); });
+  $("clearSetupBtn").addEventListener("click", function () {
+    placement = {}; selectedTrayType = null; renderSetup();
+  });
+
+  // board display size (local preference; persisted)
+  (function initBoardSize() {
+    var sel = $("boardSize");
+    if (!sel) return;
+    var saved = null;
+    try { saved = localStorage.getItem("fogBoardSize"); } catch (e) {}
+    if (saved) sel.value = saved;
+    function apply() {
+      document.documentElement.style.setProperty("--board-max", sel.value + "px");
+      try { localStorage.setItem("fogBoardSize", sel.value); } catch (e) {}
+    }
+    sel.addEventListener("change", apply);
+    apply();
+  })();
 
   $("resignBtn").addEventListener("click", function () {
     if (confirm("Resign the game? This counts as a loss.")) socket.emit("resign", {});

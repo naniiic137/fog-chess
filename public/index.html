@@ -7,7 +7,16 @@
   <header id="topbar">
     <h1>Fog Chess</h1>
     <div id="youAre" class="badge hidden"></div>
-    <div id="topActions"></div>
+    <div id="topActions">
+      <label class="sizeCtl">Board
+        <select id="boardSize">
+          <option value="440">Small</option>
+          <option value="560">Normal</option>
+          <option value="680" selected>Large</option>
+          <option value="820">Huge</option>
+        </select>
+      </label>
+    </div>
   </header>
 
   <!-- ===================== LOBBY ===================== -->
@@ -32,9 +41,10 @@
       <div class="setupLeft">
         <h2>Arrange your pieces</h2>
         <p class="hint">
-          Drag your 16 pieces onto your two home ranks in any arrangement you
-          like. Full freedom — you may even put pawns on your back rank.
-          Drag a placed piece back to the tray (or click it) to remove it.
+          Click a piece in the tray to pick it up, then click any of your two
+          home-rank squares to place it — place several of the same type by
+          clicking again. Click a placed piece to remove it. (Dragging still
+          works too.) Full freedom — you may even put pawns on your back rank.
         </p>
         <p class="hint small">
           Note: a pawn placed on its own back rank cannot double-step; it
@@ -48,6 +58,7 @@
           <button id="clearSetupBtn" class="btn ghost">Clear</button>
           <button id="readyBtn" class="btn primary" disabled>Ready</button>
         </div>
+        <div id="inHand" class="inHand"></div>
         <div id="setupStatus" class="statusLine"></div>
       </div>
       <div class="setupRight">
@@ -76,7 +87,7 @@
         <div class="pinLegend">
           <h4>Your pins</h4>
           <p class="hint small">
-            Click an opponent (grey <span class="qmark">?</span>) square to
+            Click an opponent (grey <span class="qmark"></span>) square to
             record a private guess. Pins are never sent to your opponent and
             fade automatically when the square empties.
           </p>

@@ -34,7 +34,16 @@ html, body {
   padding: 6px 0 14px; border-bottom: 1px solid #2a2e3b; margin-bottom: 16px;
 }
 #topbar h1 { font-size: 22px; margin: 0; letter-spacing: 0.5px; }
-#topActions { margin-left: auto; }
+#topActions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.sizeCtl { display: flex; align-items: center; gap: 6px; color: var(--ink-dim); font-size: 13px; }
+.sizeCtl select {
+  background: var(--panel2); color: var(--ink); border: 1px solid #3a4152;
+  border-radius: 8px; padding: 5px 8px; font-size: 13px; cursor: pointer;
+}
+.inHand {
+  margin-left: 4px; color: var(--ink-dim); font-size: 13px; min-height: 18px;
+}
+.inHand b { color: var(--accent2); }
 
 .badge {
   background: var(--panel2); color: var(--ink-dim);
@@ -84,17 +93,21 @@ body[data-screen="end"]      #screen-end { display: block; }
 .board {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  width: min(90vw, var(--board-max));
+  grid-template-rows: repeat(8, 1fr);   /* equal rows: a big glyph can't stretch its row */
+  width: min(94vw, var(--board-max));
   aspect-ratio: 1 / 1;
   border: 3px solid #2a2e3b; border-radius: 6px; overflow: hidden;
   user-select: none;
 }
 .sq {
   position: relative;
+  min-width: 0; min-height: 0;           /* let the grid track dictate size, not the glyph */
   display: flex; align-items: center; justify-content: center;
-  font-size: clamp(20px, 6vw, 44px); line-height: 1;
+  font-size: min(6.2vw, calc(var(--board-max) / 8 * 0.72)); line-height: 1;
+  overflow: hidden;
   cursor: default;
 }
+.sq .piece { max-width: 100%; }
 .sq.light { background: var(--light-sq); }
 .sq.dark  { background: var(--dark-sq); }
 .sq .coord {
@@ -105,19 +118,44 @@ body[data-screen="end"]      #screen-end { display: block; }
 
 /* pieces */
 .piece { pointer-events: none; }
-.piece.w { color: #ffffff; text-shadow: 0 0 2px #000, 0 1px 2px rgba(0,0,0,0.6); }
-.piece.b { color: #101319; text-shadow: 0 0 1px #888; }
+/* White reads on BOTH light and dark squares via a solid dark outline. */
+.piece.w {
+  color: #fbfcfe;
+  text-shadow:
+    -1.2px -1.2px 0 #1a1d24, 1.2px -1.2px 0 #1a1d24,
+    -1.2px  1.2px 0 #1a1d24, 1.2px  1.2px 0 #1a1d24,
+     0 0 3px rgba(0,0,0,0.35);
+}
+.piece.b {
+  color: #14171d;
+  text-shadow:
+    -0.6px -0.6px 0 rgba(255,255,255,0.35), 0.6px -0.6px 0 rgba(255,255,255,0.35),
+    -0.6px  0.6px 0 rgba(255,255,255,0.35), 0.6px  0.6px 0 rgba(255,255,255,0.35);
+}
 
-/* opponent unknown marker */
+/* opponent hidden-piece marker — a glossy slate "veiled piece" token, no "?" */
 .unknown {
-  width: 66%; height: 66%; border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #aab2c3, var(--opp));
-  display: flex; align-items: center; justify-content: center;
-  color: #2a2e3b; font-weight: 800; font-size: 0.6em;
-  box-shadow: inset 0 0 0 2px rgba(0,0,0,0.15);
+  width: 72%; height: 72%; border-radius: 50%;
+  background:
+    radial-gradient(circle at 36% 28%, rgba(255,255,255,0.30), rgba(255,255,255,0) 46%),
+    radial-gradient(circle at 50% 62%, #56607a, #2c3242 72%);
+  box-shadow:
+    inset 0 -3px 6px rgba(0,0,0,0.45),
+    inset 0 2px 3px rgba(255,255,255,0.14),
+    0 2px 5px rgba(0,0,0,0.4);
+  position: relative;
   pointer-events: none;
 }
-.unknown::after { content: "?"; }
+.unknown::after {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: 30%; height: 30%; border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, rgba(255,255,255,0.18), rgba(0,0,0,0.28));
+  box-shadow: inset 0 0 4px rgba(0,0,0,0.5);
+}
+.sq.selectable:hover .unknown { box-shadow:
+  inset 0 -3px 6px rgba(0,0,0,0.45), inset 0 2px 3px rgba(255,255,255,0.14),
+  0 0 0 2px var(--accent), 0 2px 6px rgba(0,0,0,0.5); }
 
 /* interaction states */
 .sq.selectable { cursor: pointer; }
@@ -173,8 +211,13 @@ body[data-screen="end"]      #screen-end { display: block; }
 }
 .trayItem {
   aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center;
-  font-size: 34px; background: var(--panel2); border-radius: 8px; cursor: grab;
-  position: relative;
+  font-size: 34px; background: var(--panel2); border-radius: 8px; cursor: pointer;
+  position: relative; transition: box-shadow 0.12s, transform 0.05s;
+}
+.trayItem:not(.empty):hover { box-shadow: inset 0 0 0 2px #3a4152; }
+.trayItem.selected {
+  box-shadow: inset 0 0 0 3px var(--accent2), 0 0 10px rgba(63,178,127,0.4);
+  transform: translateY(-1px);
 }
 .trayItem .count {
   position: absolute; bottom: 2px; right: 5px; font-size: 12px;
@@ -220,9 +263,12 @@ body[data-screen="end"]      #screen-end { display: block; }
 .pinLegend { margin-top: 16px; border-top: 1px solid #2a2e3b; padding-top: 12px; }
 .pinLegend h4 { margin: 0 0 6px; }
 .qmark {
-  display: inline-block; width: 16px; height: 16px; border-radius: 50%;
-  background: var(--opp); color: #2a2e3b; font-weight: 800; font-size: 11px;
-  text-align: center; line-height: 16px;
+  display: inline-block; width: 15px; height: 15px; border-radius: 50%;
+  vertical-align: -3px;
+  background:
+    radial-gradient(circle at 36% 28%, rgba(255,255,255,0.30), rgba(255,255,255,0) 46%),
+    radial-gradient(circle at 50% 62%, #56607a, #2c3242 72%);
+  box-shadow: inset 0 -1px 2px rgba(0,0,0,0.45), inset 0 1px 1px rgba(255,255,255,0.14);
 }
 .pinList { list-style: none; margin: 8px 0 0; padding: 0; font-size: 13px; }
 .pinList li {
