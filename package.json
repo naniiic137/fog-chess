@@ -1,0 +1,15 @@
+{
+  "name": "fog-chess",
+  "version": "1.0.0",
+  "description": "Fog Chess - a real-time LAN hidden-information chess variant (server).",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "chess.js": "^1.4.0",
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  }
+}

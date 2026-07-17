@@ -1,0 +1,147 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fog Chess</title>
+<link rel="stylesheet" href="style.css" />
+
+<div id="app">
+  <header id="topbar">
+    <h1>Fog Chess</h1>
+    <div id="youAre" class="badge hidden"></div>
+    <div id="topActions"></div>
+  </header>
+
+  <!-- ===================== LOBBY ===================== -->
+  <section id="screen-lobby" class="screen">
+    <div class="centerCard">
+      <div class="spinner"></div>
+      <p id="lobbyMsg">Connecting…</p>
+    </div>
+  </section>
+
+  <!-- ===================== REJECTED ===================== -->
+  <section id="screen-rejected" class="screen">
+    <div class="centerCard">
+      <h2>Match is full</h2>
+      <p id="rejectedMsg">Two players are already connected.</p>
+    </div>
+  </section>
+
+  <!-- ===================== SETUP ===================== -->
+  <section id="screen-setup" class="screen">
+    <div class="setupWrap">
+      <div class="setupLeft">
+        <h2>Arrange your pieces</h2>
+        <p class="hint">
+          Drag your 16 pieces onto your two home ranks in any arrangement you
+          like. Full freedom — you may even put pawns on your back rank.
+          Drag a placed piece back to the tray (or click it) to remove it.
+        </p>
+        <p class="hint small">
+          Note: a pawn placed on its own back rank cannot double-step; it
+          advances one square at a time until it reaches its 2nd rank. This is
+          intended.
+        </p>
+        <div id="setupBoard" class="board setupGrid"></div>
+        <div class="setupControls">
+          <div id="trayCount" class="badge">0 / 16 placed</div>
+          <button id="autoFillBtn" class="btn ghost">Standard setup</button>
+          <button id="clearSetupBtn" class="btn ghost">Clear</button>
+          <button id="readyBtn" class="btn primary" disabled>Ready</button>
+        </div>
+        <div id="setupStatus" class="statusLine"></div>
+      </div>
+      <div class="setupRight">
+        <h3>Tray</h3>
+        <div id="tray" class="tray"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== GAME ===================== -->
+  <section id="screen-game" class="screen">
+    <div class="gameWrap">
+      <div class="boardCol">
+        <div id="turnIndicator" class="turnBar">…</div>
+        <div id="checkBanner" class="checkBanner hidden">Check!</div>
+        <div id="gameBoard" class="board"></div>
+      </div>
+      <aside class="sidePanel">
+        <div class="panelHead">
+          <h3>Move log</h3>
+          <div class="gameActions">
+            <button id="resignBtn" class="btn danger small">Resign</button>
+          </div>
+        </div>
+        <ol id="moveLog" class="moveLog"></ol>
+        <div class="pinLegend">
+          <h4>Your pins</h4>
+          <p class="hint small">
+            Click an opponent (grey <span class="qmark">?</span>) square to
+            record a private guess. Pins are never sent to your opponent and
+            fade automatically when the square empties.
+          </p>
+          <ul id="pinList" class="pinList"></ul>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ===================== END ===================== -->
+  <section id="screen-end" class="screen">
+    <div class="endWrap">
+      <div class="boardCol">
+        <h2 id="endResult">Game over</h2>
+        <p id="endReason" class="hint"></p>
+        <div id="endBoard" class="board"></div>
+      </div>
+      <aside class="sidePanel">
+        <div class="panelHead"><h3>Full reveal</h3></div>
+        <p class="hint">Both arrangements are now visible.</p>
+        <div id="rematchStatus" class="statusLine"></div>
+        <button id="rematchBtn" class="btn primary">Rematch</button>
+        <h3 style="margin-top:18px">Final move log</h3>
+        <ol id="endMoveLog" class="moveLog"></ol>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ===================== overlays ===================== -->
+  <div id="toast" class="toast hidden"></div>
+
+  <div id="promoModal" class="modal hidden">
+    <div class="modalCard">
+      <h3>Promote to</h3>
+      <div class="promoChoices">
+        <button class="promoBtn" data-piece="q">♕ Queen</button>
+        <button class="promoBtn" data-piece="r">♖ Rook</button>
+        <button class="promoBtn" data-piece="b">♗ Bishop</button>
+        <button class="promoBtn" data-piece="n">♘ Knight</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pinModal" class="modal hidden">
+    <div class="modalCard">
+      <h3>Private guess for <span id="pinSquareLabel"></span></h3>
+      <p class="hint small">Only you can see this.</p>
+      <div class="pinChoices">
+        <button class="pinBtn" data-guess="Pawn">♟ Pawn</button>
+        <button class="pinBtn" data-guess="Knight">♞ Knight</button>
+        <button class="pinBtn" data-guess="Bishop">♝ Bishop</button>
+        <button class="pinBtn" data-guess="Rook">♜ Rook</button>
+        <button class="pinBtn" data-guess="Queen">♛ Queen</button>
+        <button class="pinBtn" data-guess="King">♚ King</button>
+      </div>
+      <input id="pinFreeText" class="pinInput" type="text"
+             placeholder="…or type a custom note" maxlength="24" />
+      <div class="modalActions">
+        <button id="pinSaveBtn" class="btn primary small">Save</button>
+        <button id="pinClearBtn" class="btn ghost small">Clear pin</button>
+        <button id="pinCancelBtn" class="btn ghost small">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="client.js"></script>
