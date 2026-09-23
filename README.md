@@ -224,4 +224,4 @@ This is almost always the host's firewall.
 
 ## License
 
-No license has been chosen yet.
+© 2026 Hamza Ben Ismail. All rights reserved.
