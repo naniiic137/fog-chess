@@ -1,162 +1,123 @@
-# Fog Chess ♟️🌫️
+# Fog Chess
 
-A two-player, real-time **hidden-information chess variant** for your local network (LAN).
-Two people on the same WiFi each open the same web page from their own device and play
-chess where **you cannot see what type your opponent's pieces are** — only that a square is
-occupied. Before the game, each player **secretly arranges their own 16 pieces** however they
-like on their two home ranks.
+**Real-time, hidden-information chess for two players on the same Wi-Fi. You can see where your opponent's pieces are, but not what they are.**
 
-It is close to the classic hidden-information variant **Kriegspiel**, with two twists:
+Before the game, each player secretly arranges their own army. During the game, every enemy piece shows up as the same grey token. The server knows the full board and enforces the rules. Each player only ever receives a filtered view of it.
 
-1. **Secret setup** — you arrange your own back two ranks in any order before the game.
-2. **Private pins** — you can drop private guess-markers on the opponent's squares to track
-   what you think each hidden piece is. Your opponent never sees them.
+![Classic game from White's view: opponent pieces are hidden tokens, with private guess pins and an anonymized move log](docs/screenshots/classic-game.jpg)
 
-The chess rules themselves are 100% standard and enforced with full information on the
-server (via [`chess.js`](https://github.com/jhlywa/chess.js)); the "fog of war" is purely a
-**per-player view filter** applied right before the board is sent to each client. The raw
-board is never transmitted.
+| Chaos mode: negotiating house rules | Chaos mode: 10×8 board with fairy pieces |
+|---|---|
+| ![House-rules screen with Chaos mode, a 10x8 board and four fairy pieces enabled](docs/screenshots/chaos-house-rules.jpg) | ![Chaos game on a 10x8 board: own fairy pieces shown as lettered badges, opponent pieces hidden](docs/screenshots/chaos-game.jpg) |
+
+Fog Chess is close to the classic hidden-information variant **Kriegspiel**, with two twists:
+
+1. **Secret setup.** Before the game, you arrange your own home ranks in any order.
+2. **Private pins.** You can put private guess markers on your opponent's squares to keep track of what you think each hidden piece is. Your opponent never sees them.
 
 ---
 
-## Table of contents
+## Status: work in progress
 
-- [Features](#features)
-- [How the fog works (design)](#how-the-fog-works-design)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Running the game](#running-the-game)
-- [Connecting a second device (LAN)](#connecting-a-second-device-lan)
-- [How to play](#how-to-play)
-- [Configuration](#configuration)
-- [Project structure](#project-structure)
-- [Architecture](#architecture)
-- [Troubleshooting](#troubleshooting)
-- [Rules notes & known limitations](#rules-notes--known-limitations)
-- [Roadmap](#roadmap)
-- [Development & testing](#development--testing)
-- [Tech stack](#tech-stack)
-- [License](#license)
+The game works end to end on a LAN. It is still a personal project, and a few things are unfinished.
+
+**What works today**
+- Two players connect and negotiate house rules, then each arranges their pieces in secret and plays a full game with a result screen and a full reveal at the end.
+- **Classic mode** uses the standard chess rules through `chess.js`: legal moves, check, checkmate, stalemate, draws, en passant and promotion. Castling is disabled on purpose because the starting positions are custom.
+- **Chaos mode** has its own rules engine: custom armies, piece bans, 6 fairy pieces, 8×8 / 10×8 / 10×10 boards, and the game is won by capturing the enemy king.
+- The fog filter is enforced on the server: an opponent's piece type is never sent to your browser while the game is running.
+- Resign, rematch (both players go back to the house-rules screen and keep their colours), and a board-size setting that is saved in your browser.
+
+**Known limitations / what's next**
+- **One match per server.** There are no rooms, room codes or spectators.
+- **No reconnect.** If a player disconnects during a game, the game ends. Once both players have left, the server resets to a fresh lobby.
+- **No clocks or timers.** Chaos mode has no move-limit or repetition draw rule. A game there ends only when a king is captured or the player to move has no legal move.
+- **No automated test suite in the repo yet.** The backend and the fog filter were tested with throwaway socket-client scripts (an automated audit checked every board sent in every message across full games and found no leaks of hidden piece types). That process is written up in [`docs/transcripts/`](docs/transcripts/), but the scripts themselves are not committed.
+- It only runs on a LAN or on localhost, and state is kept in memory with no database or accounts.
 
 ---
 
 ## Features
 
-- **Real-time two-player play** over LAN using WebSockets (Socket.io).
-- **Secret arrangement phase** — place your 16 pieces anywhere on your own two home ranks
-  (full freedom, including pawns on your back rank).
-- **Fog of war** — opponent pieces show only as a neutral "hidden piece" token; their real
-  type is never sent to you.
-- **Full standard chess rules** — legal move generation, check, checkmate, stalemate,
-  draws, en passant, and promotion, all enforced server-side with complete information.
-- **Capture reveals** — when a piece is captured, its type is revealed to both players
-  (configurable). The *capturing* piece stays hidden.
-- **Fair check** — you're told when you're in check and the checking piece's **square** is
-  highlighted, but its identity stays hidden.
-- **Private pins** — click any occupied opponent square to record a private guess
-  (Pawn/Knight/Bishop/Rook/Queen/King or free text). Never transmitted; auto-fades when the
-  square empties.
-- **Click-to-place or drag-and-drop** setup.
-- **Adjustable board size** (Small / Normal / Large / Huge), saved per browser.
-- **Resign** and **rematch** (rematch returns both players to the house-rules screen, colors kept).
-- **Full reveal** of both boards at game end.
-- **Two game modes** — **Classic** (standard rules, real checkmate) and **Chaos** (see below).
-- **House-rules negotiation** — before each game both players agree on the mode and, in
-  chaos, the board size, piece counts, bans, and which wild pieces are allowed.
-- No build step, no database, no accounts — just `npm install && npm start`.
+- **Real-time two-player play** over WebSockets (Socket.io).
+- **House-rules negotiation.** Either player can propose the mode, board size, piece counts, bans and fairy pieces. Any change resets both agreements, and the game starts only when both players agree to the same proposal.
+- **Secret arrangement phase.** You place your pieces anywhere on your own home ranks, including pawns on the back rank. You can click to place or drag and drop. Classic mode has a "Standard setup" shortcut and Chaos mode has "Auto-fill".
+- **Fog of war.** Opponent pieces are drawn as a neutral hidden token, and their real type is never sent to you.
+- **Capture reveals.** When a piece is captured, its type is revealed to both players. The piece that made the capture stays hidden. This is configurable.
+- **Fair check (Classic).** You are told when you are in check, and the checking piece's *square* is highlighted, but not its identity.
+- **Private pins.** Click any occupied opponent square to record a guess (Pawn/Knight/…/King or free text). Pins stay in your browser, and a pin fades automatically when its square empties.
+- **Anonymized move log.** Your own moves are named in full (`Knight g1->f3`). Your opponent's moves show only the squares (`unknown piece: b8->c6`).
+- **Full reveal** of both armies when the game ends.
+- **Adjustable board size** (Small / Normal / Large / Huge), saved in `localStorage`.
+- **No build step, no database, no accounts:** `npm install && npm start`.
 
-### Chaos mode 🌪️
+### Chaos mode
 
-A second, "go wild" mode that both players opt into on the house-rules screen. Instead of
-checkmate, **you win by capturing the enemy king** — which changes everything it's allowed to
-do:
+A "go wild" mode that both players must agree to. Instead of checkmate, **you win by capturing every enemy king**:
 
-- **Custom piece counts** — field multiple queens, multiple kings, extra knights, whatever
-  you both agree to. (You need at least one king; capture *all* enemy kings to win.)
-- **Piece bans** — either player proposes banning any piece type; it applies only when the
-  other agrees, and that type is removed from both armies for the game.
-- **Wild / fairy pieces** — enable exotic long-range pieces:
-  | Piece | Moves like |
-  |-------|-----------|
-  | **Amazon** | Queen **+** Knight |
-  | **Chancellor** | Rook **+** Knight |
-  | **Archbishop** | Bishop **+** Knight |
-  | **Nightrider** | a Knight that keeps riding in the same knight-direction (long range) |
-  | **Camel** | a longer (1,3) knight-style leaper |
-  | **Wizard** | Camel **+** short diagonal steps |
-- **Bigger boards** — play on 8×8, 10×8, or 10×10.
-- Because there's no "check," there's no checkmate or stalemate-by-check: a game ends when a
-  king is captured, or is a draw if the player to move has no legal move.
+- **Custom piece counts:** multiple queens, multiple kings, extra knights, and so on (at least one king is required).
+- **Piece bans:** a banned type is removed from both armies.
+- **Fairy pieces** (6):
 
-Your own fairy pieces show as coloured lettered badges; your opponent's pieces — standard or
-fairy — always show as the same neutral hidden token, so the fog holds for the wild pieces
-too.
+  | Piece | Letter | Moves like |
+  |-------|:-----:|-----------|
+  | **Amazon** | A | Queen **+** Knight |
+  | **Chancellor** | C | Rook **+** Knight |
+  | **Archbishop** | H | Bishop **+** Knight |
+  | **Nightrider** | I | A knight that keeps riding in the same knight direction |
+  | **Camel** | M | A (1,3) leaper |
+  | **Wizard** | W | Camel **+** one-step diagonal |
+
+- **Bigger boards:** 8×8, 10×8 or 10×10.
+- There is no check, so there is no checkmate. If the player to move has no legal move, the game is a draw.
+
+Your own fairy pieces appear as coloured lettered badges. All of your opponent's pieces, standard or fairy, appear as the same hidden token.
 
 ---
 
-## How the fog works (design)
+## How it works: the server-side fog filter
 
-The single most important design rule:
+The central design rule:
 
-> **The rules engine is completely standard and full-information. The fog is only a view
-> filter applied when sending state to each client — never a change to the rules.**
+> **The rules engine uses standard, full-information rules. The fog is only a view filter applied when state is sent to each client. It never changes the rules.**
 
-- The **server** always holds the true, complete board and enforces standard chess legality
-  with 100% information, exactly like a normal engine.
-- Each client only ever receives a **filtered** copy of the board:
-  - Full detail (`{type, color}`) for **their own** pieces.
-  - `{occupied: true}` (no type, no color) for **opponent** squares.
-  - `null` for empty squares.
-- The raw, full board is emitted in exactly **one** place: the `gameOver` event at the end
-  of the game, for the final reveal.
+```
+            full board (server memory only)
+                         │
+      ┌──────────────────┴──────────────────┐
+      │ Classic: chess.js    Chaos: chaos.js│   legality, check, win/draw
+      └──────────────────┬──────────────────┘
+                         │
+                  src/fog.js filterBoard(board, viewer)
+                ┌────────┴────────┐
+         White's view        Black's view
+   own: {type,color}      own: {type,color}
+   opp: {occupied:true}   opp: {occupied:true}
+   empty: null            empty: null
+```
 
-All of this hidden-info logic lives in a single function (`src/fog.js`) so it cannot leak
-into the rules engine. This design was verified by an automated audit that scanned every
-board in every message across many games and confirmed **zero** opponent-type leaks.
+- The **server** always holds the true board. Classic mode uses a `chess.js` instance, loaded from a FEN built from the two secret arrangements (`src/fen.js`). Chaos mode uses its own engine (`src/chaos.js`).
+- Before **every** emit, `src/fog.js` turns the true board into a per-player copy. You get your own pieces in full, only `{occupied: true}` for opponent squares, and `null` for empty ones. Move-log entries are filtered the same way.
+- `fog.js` works against a small "board source" interface (`get(square)`), so the same filter covers both modes and every board size without knowing any chaos rules.
+- The full, unfiltered board is sent in exactly **one** place: the `gameOver` event, for the final reveal.
+- The client (`public/client.js`) has no code path that draws an opponent piece type from the live board. The information simply isn't there.
 
----
-
-## Requirements
-
-- **[Node.js](https://nodejs.org/) 18 or newer** (includes `npm`). Check with:
-  ```bash
-  node -v
-  npm -v
-  ```
-- Two devices (phones, tablets, or computers) on the **same WiFi / LAN**. You can also test
-  solo by opening two browser tabs/windows on the host machine.
-- A modern browser (Chrome, Edge, Firefox, or Safari).
-
-No internet connection is required once dependencies are installed — the game runs entirely
-on your local network.
+The Socket.io events and payload shapes are specified in [`docs/CONTRACT.md`](docs/CONTRACT.md) and [`docs/CONTRACT-v2.md`](docs/CONTRACT-v2.md).
 
 ---
 
-## Installation
+## Quick start
 
-1. **Get the code.** Clone the repository (or download the ZIP and extract it):
-   ```bash
-   git clone https://github.com/naniiic137/fog-chess.git
-   cd fog-chess
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-   This installs `express`, `socket.io`, and `chess.js` into `node_modules/`.
-
----
-
-## Running the game
-
-Start the server on the **host** machine (the computer that will run the game):
+**Requirements:** [Node.js](https://nodejs.org/) 18 or newer, and a modern browser.
 
 ```bash
+git clone https://github.com/naniiic137/fog-chess.git
+cd fog-chess
+npm install
 npm start
 ```
 
-You'll see something like:
+The server prints its addresses:
 
 ```
 Fog Chess running at:
@@ -164,19 +125,16 @@ Fog Chess running at:
   http://192.168.1.42:3000
 ```
 
-- On the **host**, open `http://localhost:3000` in a browser.
-- On the **second device**, open the `http://192.168.x.x:3000` address shown in the console
-  (see the next section).
+- On the host, open `http://localhost:3000`.
+- On a second device on the **same Wi-Fi**, open the `http://192.168.x.x:3000` address.
+- To try it alone, open two browser windows. One of them should be private or incognito, or in a different browser.
 
-The **first two** browsers to connect become **White** and **Black**. A third connection is
-told the match is full. One match runs at a time.
+The first two connections become **White** and **Black**. A third connection is told the match is full.
 
 ### Changing the port
 
-The default port is `3000`. To use another (e.g. if 3000 is taken):
-
 ```bash
-# macOS / Linux
+# macOS / Linux / Git Bash
 PORT=4000 npm start
 
 # Windows PowerShell
@@ -188,91 +146,24 @@ set PORT=4000 && npm start
 
 ---
 
-## Connecting a second device (LAN)
-
-1. Make sure **both devices are on the same WiFi network**.
-2. On the host, note the `http://192.168.x.x:3000` line printed at startup — that's the
-   host's LAN address. (If several are printed, use the one matching your WiFi adapter.)
-3. On the second device's browser, type that full address (including `:3000`).
-4. If it won't connect, it's almost always a **firewall** — see
-   [Troubleshooting](#troubleshooting).
-
-**Finding the host IP manually** (if needed):
-
-- **Windows:** run `ipconfig` and look for "IPv4 Address" under your WiFi adapter.
-- **macOS:** System Settings → Wi-Fi → Details, or `ipconfig getifaddr en0`.
-- **Linux:** `hostname -I` or `ip addr`.
-
----
-
 ## How to play
 
-### 1. Lobby
-When you connect you'll see a "waiting for opponent" screen until the second player joins.
-
-### 2. House rules (agree on the game)
-Both players land on the house-rules screen. Pick **Classic** (standard chess rules) or
-**Chaos**. In chaos you can set the board size, per-piece counts, bans, and which fairy pieces
-are enabled. Either player can change any setting — **any change resets both agreements**, so
-you both press **Agree** on the final rules to start. (For a quick standard game, both just
-pick Classic and Agree.)
-
-### 3. Setup (secret arrangement)
-- You see **only your own two home ranks** and a tray of your 16 pieces (8 pawns, 2 rooks,
-  2 knights, 2 bishops, 1 queen, 1 king).
-- **To place:** click a piece in the tray to "pick it up," then click a home square to drop
-  it. Keep clicking squares to place more of the same type. You can also **drag** pieces.
-- **To remove:** click a placed piece (with nothing in hand), or drag it off.
-- Shortcuts: **Standard setup** fills the normal chess formation; **Clear** empties the board.
-- Your opponent is arranging their side at the same time — you can't see it.
-- Press **Ready** once all 16 pieces are placed. The game starts when both players are ready.
-
-### 4. Live game
-- White moves first, then players alternate.
-- **Your pieces** show in full. Click one to see its legal destination squares highlighted,
-  then click a highlighted square to move.
-- **Opponent pieces** appear as a neutral grey **hidden-piece token** — you never see their
-  type. When your opponent moves, the from→to squares flash so you can track the motion.
-- If a pawn reaches the last rank you'll be asked what to **promote** to.
-- **Captures:** the captured piece's type is announced to both players (the capturing piece
-  stays hidden). Captures are noted in the move log.
-- **Check:** if you're in check, a banner appears and the checking piece's **square** is
-  outlined — but its identity stays secret.
-- The **move log** shows your own moves in full and your opponent's as anonymized entries
-  like `unknown piece: e7→e5`.
-
-### 5. Pins (private guesses)
-- Click any occupied **opponent** square to attach a private guess (a piece type or free
-  text). It shows as a small purple tag only **you** can see.
-- Pins are **never** sent to your opponent.
-- When the piece leaves that square, the pin fades away automatically. Re-pin wherever you
-  think it went.
-
-### 6. End of game
-- On checkmate, stalemate, draw, or resignation, **both boards are fully revealed** and the
-  result is shown.
-- Click **Rematch** to play again (both must accept); you return to a fresh setup phase with
-  the same colors.
+1. **Lobby.** Wait for the second player to connect.
+2. **House rules.** Pick **Classic** or **Chaos**. For Chaos, also set the board size, piece counts, bans and fairy pieces. Both players press **Agree** on the same proposal.
+3. **Setup (secret).** You only see your own home ranks. Click a tray piece to pick it up, then click home squares to place it (dragging works too). Click a placed piece to remove it. Press **Ready** once every piece is placed.
+4. **Play.** Click one of your pieces to see its legal moves, then click a highlighted square. Opponent moves flash their from/to squares. If a pawn reaches the last rank, you choose what it promotes to.
+5. **Pins.** Click any occupied opponent square to save a private guess.
+6. **End.** On checkmate, king capture, stalemate, draw, resignation or disconnect, both armies are revealed. **Rematch** (both players must accept) takes you back to the house-rules screen with the same colours.
 
 ---
 
 ## Configuration
 
-Server-side options live at the top of the game logic as a `CONFIG` object (see
-`src/game.js`):
-
-| Option                    | Default | Effect                                                                 |
-|---------------------------|---------|------------------------------------------------------------------------|
-| `revealCapturedPieceType` | `true`  | When `true`, a captured piece's type is revealed to both players. Set `false` for a harder, fully-blind mode. |
-
-Client-side:
-
-- **Board size** — the Small/Normal/Large/Huge selector in the top bar (saved per browser
-  in `localStorage`).
-
-Environment:
-
-- **`PORT`** — the TCP port the server listens on (default `3000`).
+| Where | Option | Default | Effect |
+|---|---|---|---|
+| `server.js` (`CONFIG`) | `revealCapturedPieceType` | `true` | Reveal a captured piece's type to both players. Set it to `false` for a harder, fully blind game. |
+| Environment | `PORT` | `3000` | TCP port the server listens on. |
+| Browser | Board size | Normal | Small / Normal / Large / Huge, saved in `localStorage`. |
 
 ---
 
@@ -280,125 +171,57 @@ Environment:
 
 ```
 fog-chess/
-├── server.js              # Express + Socket.io server; connection & event handling; LAN URL printout
-├── package.json           # Dependencies and the "start" script
+├── server.js            # Express static server + Socket.io event wiring; prints LAN URLs
+├── package.json
 ├── src/
-│   ├── game.js            # Game state machine (lobby→config→setup→playing→ended); routes by mode
-│   ├── chaos.js           # The Chaos variant engine (fairy pieces, king-capture, variable boards)
-│   ├── fen.js             # Builds a chess.js FEN string from the two secret arrangements (classic)
-│   └── fog.js             # THE fog filter — the only place hidden-info logic lives (both modes)
-├── public/                # Static frontend (served as-is, no build step)
-│   ├── index.html         # Markup for all screens (lobby / setup / game / end) + modals
-│   ├── style.css          # Styling, board grid, pieces, hidden-piece token, pins
-│   └── client.js          # All client logic: rendering, setup, moves, pins, socket wiring
-├── PLAN.md                # Implementation plan
-├── CONTRACT.md            # The binding Socket.io event contract (payload shapes)
-├── transcripts/           # Build/test transcripts (how it was made & verified)
-└── README.md              # This file
+│   ├── game.js          # Match state machine: lobby → config → setup → playing → ended; routes by mode
+│   ├── fog.js           # The fog filter: the only module that handles hidden information
+│   ├── fen.js           # Validates classic arrangements and builds the starting FEN for chess.js
+│   └── chaos.js         # Chaos rules engine: fairy pieces, variable boards, king capture
+├── public/              # Static frontend (no framework, no bundler)
+│   ├── index.html       # Markup for every screen (lobby / house rules / setup / game / end) + modals
+│   ├── style.css
+│   └── client.js        # Rendering, setup, moves, pins, socket wiring
+└── docs/
+    ├── screenshots/
+    ├── PLAN.md, PLAN-v2.md             # Implementation plans (v1 classic, v2 chaos mode)
+    ├── CONTRACT.md, CONTRACT-v2.md     # Socket.io event contract (payload shapes)
+    ├── fog-chess-build-prompt.md       # Original project brief
+    └── transcripts/                    # Build and test logs, including the fog-leak audit
 ```
-
----
-
-## Architecture
-
-- **Backend:** Node.js + Express serves the static `public/` folder; Socket.io handles
-  real-time messaging. `chess.js` provides move generation, legality, check/checkmate/
-  stalemate/draw detection, en passant, and promotion.
-- **Custom arrangement → FEN:** the two players' secret placements are composed into a FEN
-  string (`src/fen.js`) and loaded into `chess.js` with validation skipped (so unusual but
-  legal-for-this-variant positions, like a pawn on the back rank, are allowed). The castling
-  field is always `-` (castling is not part of v1).
-- **Fog filter:** `src/fog.js` converts the true board into a per-viewer filtered board
-  before every emit. Own pieces keep `{type,color}`; opponent pieces become `{occupied:true}`.
-- **Contract:** the exact Socket.io event names and JSON payload shapes are documented in
-  [`CONTRACT.md`](CONTRACT.md). The frontend and backend were built independently against
-  this contract.
-- **State:** everything lives in server memory. One match at a time; no database.
-
----
-
-## Troubleshooting
-
-**The second device can't reach the page / it just spins "Connecting…".**
-Almost always a firewall on the host is blocking incoming connections to Node.
-
-- **Windows:** the first time you run `npm start`, Windows may pop up a "Windows Defender
-  Firewall" dialog — click **Allow access** (make sure **Private networks** is checked). If
-  you dismissed it, go to *Windows Security → Firewall & network protection → Allow an app
-  through firewall* and allow **Node.js**, or temporarily allow inbound TCP on your chosen
-  port for the Private profile.
-- **macOS:** *System Settings → Network → Firewall* — allow incoming connections for Node,
-  or turn the firewall off briefly to test.
-- Confirm both devices are on the **same** WiFi (not one on WiFi and one on a guest network
-  or cellular).
-
-**`Error: listen EADDRINUSE :::3000` (port already in use).**
-Another program (or a previous copy of the game) is using port 3000. Start on another port:
-`PORT=4000 npm start`.
-
-**`npm install` fails.**
-Ensure Node.js 18+ is installed (`node -v`). Delete `node_modules/` and
-`package-lock.json` and run `npm install` again.
-
-**"Match is full."**
-Two players are already connected — Fog Chess supports one match at a time in v1. Close one
-of the other tabs/devices and reload.
-
-**A player disconnected mid-game.**
-Reconnect handling is out of scope for v1. Refresh both browsers and start a new match.
-
----
-
-## Rules notes & known limitations
-
-- **No castling** in v1. Because pieces start in custom positions, castling is intentionally
-  disabled.
-- **Back-rank pawns:** you may place a pawn on your own back rank. Such a pawn advances one
-  square at a time (it does not get the two-square first move until it reaches its 2nd rank).
-  This is intended.
-- **Promotion** works normally; if you don't choose a piece the game promotes to a Queen.
-- **One match at a time**, single WiFi/LAN, in-memory state.
-
-**Out of scope for v1 (see roadmap):** reconnect-after-disconnect, multiple simultaneous
-rooms/room codes, spectators, clocks/timers, and internet (non-LAN) play.
-
----
-
-## Roadmap
-
-Already shipped: two modes (Classic + Chaos), house-rules negotiation, custom piece counts,
-piece bans, wild/fairy pieces, and bigger boards (see [Chaos mode](#chaos-mode-)).
-
-Still planned:
-
-- **Reconnect-after-disconnect** handling (currently out of scope — refresh both browsers to
-  restart if someone drops).
-- **Multiple simultaneous rooms / room codes** and **spectators**.
-- **Clocks / timers**.
-- More fairy pieces and preset "chaos packs."
-
----
-
-## Development & testing
-
-- Start the server: `npm start` (or `PORT=xxxx npm start`).
-- The frontend is plain HTML/CSS/JS in `public/` — edit and refresh the browser; there is no
-  build step or bundler.
-- The `transcripts/` folder documents how the app was planned, built, and tested (including
-  an automated fog-leak audit that drove real socket clients through full games).
-- Syntax-check the client without a browser: `node --check public/client.js`.
 
 ---
 
 ## Tech stack
 
-- **Node.js**, **Express** (static hosting) and **Socket.io** (real-time transport)
-- **chess.js** for full-information rule enforcement
-- Plain **HTML / CSS / JavaScript** frontend (no framework, no build step)
+- **Node.js**, **Express** (static hosting), **Socket.io** (real-time transport)
+- **chess.js** for Classic-mode rules, with a hand-written engine for Chaos mode
+- Plain **HTML / CSS / JavaScript** frontend with no framework and no build step
 
 ---
 
+## Troubleshooting
+
+**The second device can't reach the page, or it stays on "Connecting…".**
+This is almost always the host's firewall.
+- **Windows:** the first time you run the server, allow Node.js in the Windows Defender Firewall prompt with **Private networks** checked. If you dismissed the prompt, go to *Windows Security → Firewall & network protection → Allow an app through firewall*.
+- **macOS:** *System Settings → Network → Firewall*, then allow incoming connections for Node.
+- Make sure both devices are on the **same** network (not a guest network and not cellular).
+
+**`EADDRINUSE` (port already in use).** Start the server on another port, for example `PORT=4000 npm start`.
+
+**"Match is full."** Two players are already connected. Close one of the other tabs or devices and reload.
+
+**A player disconnected mid-game.** Reconnecting isn't supported yet. Refresh both browsers to start a new match.
+
+---
+
+## Rules notes
+
+- **No castling**, in either mode, because the starting positions are custom.
+- **Back-rank pawns** are allowed. They move one square at a time until they reach their 2nd rank.
+- **Promotion** works as normal. In Chaos mode the choices come from the agreed roster. If no choice is sent, the pawn promotes to a queen (when a queen is available).
+
 ## License
 
-No license has been specified yet. If you plan to make this public, add a `LICENSE` file
-(e.g. MIT) to clarify how others may use it.
+No license has been chosen yet.

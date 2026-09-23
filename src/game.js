@@ -125,6 +125,13 @@ class FogChessGame {
     if (!color) return null;
     this.players[FogChessGame.keyOf(color)] = null;
 
+    // Both players gone: start over from an empty lobby so the next two
+    // connections get a fresh match instead of the previous game's end screen.
+    if (!this.players.white && !this.players.black) {
+      this.reset();
+      return { color, ended: false };
+    }
+
     if (this.phase === 'playing') {
       this.phase = 'ended';
       this.result = {
