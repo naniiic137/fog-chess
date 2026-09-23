@@ -84,20 +84,54 @@ function revealBoard(source, dims) {
   return board;
 }
 
+function pieceName(type) {
+  return PIECE_NAMES[type] || type;
+}
+
+/**
+ * moveText(record, opts) -> plain-English move description.
+ *   opts.named     : whether the moving piece may be named (own move / reveal)
+ *   opts.capturedName : name of the captured piece, or null when not revealed
+ *   opts.yourPieceTaken : true when the captured piece belongs to the viewer
+ * Examples: "Knight g1→f3", "Hidden piece d8→d5, takes your Pawn",
+ *           "Castles kingside (e1→g1)", "Pawn e7→e8, promotes to Queen".
+ */
+function moveText(record, opts) {
+  const path = `${record.from}→${record.to}`;
+  let text;
+  if (opts.named && record.castle) {
+    text = `Castles ${record.castle === 'k' ? 'kingside' : 'queenside'} (${path})`;
+  } else if (opts.named) {
+    text = `${pieceName(record.piece)} ${path}`;
+  } else {
+    text = `Hidden piece ${path}`;
+  }
+  if (record.capture) {
+    if (opts.capturedName) {
+      text += `, takes ${opts.yourPieceTaken ? 'your ' : ''}${opts.capturedName}`;
+    } else {
+      text += opts.yourPieceTaken ? ', takes one of your pieces' : ', captures';
+    }
+  }
+  if (opts.named && record.promotion) {
+    text += `, promotes to ${pieceName(record.promotion)}`;
+  }
+  return text;
+}
+
 /**
  * filterMoveRecord(record, viewerColor, config) -> log entry.
  * Own move: full detail (piece + san + text). Opponent move: anonymized, with NO
- * `piece` and NO `san` (a fairy opponent move still reads "unknown piece: ..").
- * `capturedType` is only surfaced when revealCapturedPieceType is on (default true).
+ * `piece`, `san`, `promotion` or `castle` (a fairy opponent move still reads
+ * "Hidden piece ..."). `capturedType` is only surfaced when
+ * revealCapturedPieceType is on (default true).
  */
 function filterMoveRecord(record, viewerColor, config) {
   const reveal = !!(config && config.revealCapturedPieceType);
   const capturedType = record.capture && reveal ? record.capturedType : null;
-  const capName = capturedType ? (PIECE_NAMES[capturedType] || capturedType) : null;
-  const capSuffix = capName ? ` (captured ${capName})` : '';
+  const capturedName = capturedType ? pieceName(capturedType) : null;
 
   if (record.color === viewerColor) {
-    const name = PIECE_NAMES[record.piece] || record.piece;
     return {
       ply: record.ply,
       color: record.color,
@@ -108,12 +142,13 @@ function filterMoveRecord(record, viewerColor, config) {
       capture: !!record.capture,
       capturedType,
       promotion: record.promotion || null,
+      castle: record.castle || null,
       own: true,
-      text: `${name} ${record.from}->${record.to}${capSuffix}`,
+      text: moveText(record, { named: true, capturedName, yourPieceTaken: false }),
     };
   }
 
-  // Opponent move: anonymized. Never include piece/san/promotion identity.
+  // Opponent move: anonymized. Never include piece/san/promotion/castle identity.
   return {
     ply: record.ply,
     color: record.color,
@@ -122,7 +157,35 @@ function filterMoveRecord(record, viewerColor, config) {
     capture: !!record.capture,
     capturedType,
     own: false,
-    text: `unknown piece: ${record.from}->${record.to}${capSuffix}`,
+    text: moveText(record, { named: false, capturedName, yourPieceTaken: true }),
+  };
+}
+
+/**
+ * revealMoveRecord(record, viewerColor) -> fully named log entry for BOTH sides.
+ * USED ONLY once the game has ended (the same moment gameOver.fullBoard reveals
+ * every piece), so the final move log can name the opponent's pieces too.
+ */
+function revealMoveRecord(record, viewerColor) {
+  const capturedName = record.capture && record.capturedType ? pieceName(record.capturedType) : null;
+  return {
+    ply: record.ply,
+    color: record.color,
+    from: record.from,
+    to: record.to,
+    piece: record.piece,
+    san: record.san === undefined ? null : record.san,
+    capture: !!record.capture,
+    capturedType: record.capture ? record.capturedType : null,
+    promotion: record.promotion || null,
+    castle: record.castle || null,
+    own: record.color === viewerColor,
+    revealed: true,
+    text: moveText(record, {
+      named: true,
+      capturedName,
+      yourPieceTaken: record.color !== viewerColor,
+    }),
   };
 }
 
@@ -246,6 +309,7 @@ module.exports = {
   filterBoard,
   revealBoard,
   filterMoveRecord,
+  revealMoveRecord,
   checkInfoFor,
   findAttackerSquare,
   findKing,

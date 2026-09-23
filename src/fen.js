@@ -59,7 +59,9 @@ function validateArrangement(placement, color) {
  *   Black pieces are lowercase (from blackPlacement, ranks 7-8 only).
  *   Ranks 3-6 are always empty. Consecutive empties collapse to a digit.
  * - Side to move is always "w".
- * - Castling field is ALWAYS "-" (castling is dropped in this variant).
+ * - Castling field: see castlingRights() — a side may castle on a wing only when
+ *   its king starts on e1/e8 AND a rook starts on that wing's corner (a1/h1,
+ *   a8/h8), i.e. exactly the squares of the standard setup. Otherwise "-".
  * - En passant "-", halfmove "0", fullmove "1".
  *
  * NOTE (back-rank pawns): This FEN may legally place pawns on rank 1/8, which
@@ -99,8 +101,26 @@ function buildFen(whitePlacement, blackPlacement) {
     rankStrings.push(rankStr);
   }
 
-  // side=w, castling='-', en passant='-', halfmove=0, fullmove=1
-  return rankStrings.join('/') + ' w - - 0 1';
+  // side=w, castling per castlingRights(), en passant='-', halfmove=0, fullmove=1
+  return rankStrings.join('/') + ' w ' + castlingRights(whitePlacement, blackPlacement) + ' - 0 1';
 }
 
-module.exports = { validateArrangement, buildFen, COMPOSITION };
+/**
+ * castlingRights(whitePlacement, blackPlacement) -> FEN castling field.
+ * Castling is granted per wing when the king and that wing's rook start on their
+ * standard squares (White: Ke1 + Rh1 -> "K", Ke1 + Ra1 -> "Q"; Black likewise on
+ * rank 8). chess.js then applies the normal rules (path empty, king not in,
+ * through or into check; rights lost once the king or rook moves).
+ */
+function castlingRights(whitePlacement, blackPlacement) {
+  const w = whitePlacement || {};
+  const b = blackPlacement || {};
+  let out = '';
+  if (w.e1 === 'k' && w.h1 === 'r') out += 'K';
+  if (w.e1 === 'k' && w.a1 === 'r') out += 'Q';
+  if (b.e8 === 'k' && b.h8 === 'r') out += 'k';
+  if (b.e8 === 'k' && b.a8 === 'r') out += 'q';
+  return out || '-';
+}
+
+module.exports = { validateArrangement, buildFen, castlingRights, COMPOSITION };

@@ -13,12 +13,27 @@
 // boards. game.js contains NO movement math — it routes by mode. Classic remains
 // behaviorally identical to v1 from `setup` onward.
 
+const crypto = require('crypto');
 const { Chess } = require('chess.js');
 const { validateArrangement: validateClassicArrangement, buildFen, COMPOSITION } = require('./fen');
 const fog = require('./fog');
 const chaos = require('./chaos');
 
 // Phase machine: lobby -> config -> setup -> playing -> ended (-> config on rematch).
+//
+// Seats & reconnection: each seat (white/black) is owned by a secret token that
+// the server issues on first join and the browser keeps in storage. A socket that
+// drops keeps its seat reserved for `reconnectGraceMs`; presenting the token again
+// within that window resumes the seat (same color, same fogged view). Only when
+// the window expires is the seat released - mid-game that is a loss by
+// abandonment. game.js stores deadlines; server.js owns the actual timers.
+
+const DEFAULT_RECONNECT_GRACE_MS = 60 * 1000;
+const TOKEN_RE = /^[a-f0-9]{32}$/;
+
+function newToken() {
+  return crypto.randomBytes(16).toString('hex');
+}
 
 const CLASSIC_DIMS = { cols: 8, rows: 8 };
 
@@ -38,8 +53,14 @@ class FogChessGame {
   constructor(options) {
     // `options` = server flags (e.g. revealCapturedPieceType). Distinct from the
     // negotiated house-rules `config`.
-    this.options = options || { revealCapturedPieceType: true };
-    this.players = { white: null, black: null };
+    this.options = Object.assign({ revealCapturedPieceType: true }, options || {});
+    this.reconnectGraceMs = Number.isFinite(this.options.reconnectGraceMs)
+      ? this.options.reconnectGraceMs
+      : DEFAULT_RECONNECT_GRACE_MS;
+    this.players = { white: null, black: null };   // connected socket id per seat
+    this.tokens = { white: null, black: null };    // seat owner token (null = free seat)
+    this.awayUntil = { white: null, black: null }; // reconnect deadline (ms epoch) while away
+    this.gameCounter = 0;
     this.reset();
   }
 
@@ -68,6 +89,18 @@ class FogChessGame {
     this.turn = 'w';
     this.result = null; // { result, winner, reason }
     this.startFen = null;
+    this.gameId = null; // bumps every time a game starts (lets clients scope per-game data)
+    // chaos draw tracking
+    this.positionCounts = new Map();
+    this.halfmoveClock = 0;
+  }
+
+  /** Forget both seats as well as the match (nobody left who could resume). */
+  resetAll() {
+    this.players = { white: null, black: null };
+    this.tokens = { white: null, black: null };
+    this.awayUntil = { white: null, black: null };
+    this.reset();
   }
 
   // ---- helpers ------------------------------------------------------------
@@ -92,22 +125,87 @@ class FogChessGame {
 
   // ---- connection / role assignment --------------------------------------
 
-  /** Assign the next free slot. Returns { color, role } or null when full. */
-  addPlayer(socketId) {
-    if (this.players.white === null) {
-      this.players.white = socketId;
-      return { color: 'w', role: 'white' };
-    }
-    if (this.players.black === null) {
-      this.players.black = socketId;
-      return { color: 'b', role: 'black' };
-    }
+  /** Seat color owned by `token`, or null. */
+  seatOfToken(token) {
+    if (typeof token !== 'string' || !TOKEN_RE.test(token)) return null;
+    if (this.tokens.white === token) return 'w';
+    if (this.tokens.black === token) return 'b';
     return null;
   }
 
-  /** lobby -> config once both slots are filled. Returns true on transition. */
+  isConnected(color) {
+    return this.socketOf(color) !== null;
+  }
+
+  /**
+   * connect(socketId, { token, takeover }) - seat a new socket.
+   *   - token owns a seat that is away           -> resume it.
+   *   - token owns a seat held by another socket -> resume only when `takeover`
+   *     (the same browser tab reconnecting before the old socket timed out);
+   *     the old socket id is returned as `replaced` so the server can drop it.
+   *   - otherwise a newcomer: gets a free seat and a fresh token. After a game
+   *     has ended, a newcomer may claim a seat whose owner is away, and the match
+   *     restarts fresh so they never land on someone else's end screen.
+   * Returns { color, role, token, resumed, replaced, fresh } or
+   *         { rejected: 'full' | 'reconnecting' }.
+   */
+  connect(socketId, opts) {
+    const o = opts || {};
+    const tokenColor = this.seatOfToken(o.token);
+    if (tokenColor) {
+      const key = FogChessGame.keyOf(tokenColor);
+      const current = this.players[key];
+      if (current === null || o.takeover) {
+        this.players[key] = socketId;
+        this.awayUntil[key] = null;
+        return {
+          color: tokenColor, role: key, token: this.tokens[key], resumed: true,
+          replaced: current && current !== socketId ? current : null, fresh: false,
+        };
+      }
+      // Token already in use by a live socket (e.g. a second tab that copied it):
+      // fall through and treat this socket as a newcomer.
+    }
+
+    let fresh = false;
+    if (this.phase === 'ended') {
+      const whiteLive = this.isConnected('w');
+      const blackLive = this.isConnected('b');
+      if (!whiteLive && !blackLive) {
+        this.resetAll();
+        fresh = true;
+      } else if (!whiteLive || !blackLive) {
+        const claim = whiteLive ? 'black' : 'white';
+        this.tokens[claim] = null;
+        this.awayUntil[claim] = null;
+        this.resetForNewOpponent();
+        fresh = true;
+      }
+    }
+
+    for (const key of ['white', 'black']) {
+      if (this.tokens[key] === null) {
+        const token = newToken();
+        this.tokens[key] = token;
+        this.players[key] = socketId;
+        this.awayUntil[key] = null;
+        const color = key === 'white' ? 'w' : 'b';
+        return { color, role: key, token, resumed: false, replaced: null, fresh };
+      }
+    }
+    const someoneAway = this.awayUntil.white !== null || this.awayUntil.black !== null;
+    return { rejected: someoneAway ? 'reconnecting' : 'full' };
+  }
+
+  /** Back-compat helper (tests / tools): seat a socket without a token. */
+  addPlayer(socketId) {
+    const res = this.connect(socketId, {});
+    return res.rejected ? null : { color: res.color, role: res.role, token: res.token };
+  }
+
+  /** lobby -> config once both seats are taken. Returns true on transition. */
   maybeStartConfig() {
-    if (this.phase === 'lobby' && this.players.white && this.players.black) {
+    if (this.phase === 'lobby' && this.tokens.white && this.tokens.black) {
       this.phase = 'config';
       return true;
     }
@@ -115,47 +213,83 @@ class FogChessGame {
   }
 
   /**
-   * Minimal disconnect handling (reconnect out of scope). Frees the slot.
-   * If a game was in progress, ends it with opponentLeft so the peer is not stuck.
-   * In config/setup, resets shared negotiation/setup state back to lobby.
-   * Returns { color, ended } or null when the socket held no slot.
+   * handleDisconnect(socketId, now) - the socket's seat stays RESERVED for
+   * reconnectGraceMs. Nothing about the match changes yet.
+   * Returns { color, awayUntil } or null when the socket held no seat (or was
+   * already replaced by a newer socket for the same seat).
    */
-  handleDisconnect(socketId) {
+  handleDisconnect(socketId, now) {
     const color = this.colorOf(socketId);
     if (!color) return null;
-    this.players[FogChessGame.keyOf(color)] = null;
+    const key = FogChessGame.keyOf(color);
+    this.players[key] = null;
+    this.awayUntil[key] = (now || Date.now()) + this.reconnectGraceMs;
+    return { color, awayUntil: this.awayUntil[key] };
+  }
 
-    // Both players gone: start over from an empty lobby so the next two
-    // connections get a fresh match instead of the previous game's end screen.
-    if (!this.players.white && !this.players.black) {
-      this.reset();
-      return { color, ended: false };
+  /**
+   * expireSeat(color) - the reconnect window ran out: release the seat.
+   *  - playing  -> the game ends; the other side wins by abandonment.
+   *  - config / setup -> the remaining player drops back to the lobby.
+   *  - nobody left at all -> full reset to an empty lobby.
+   * Returns { ended } (ended = a game just finished by abandonment), or null
+   * when the seat was not actually away (already resumed / released).
+   */
+  expireSeat(color) {
+    const key = FogChessGame.keyOf(color);
+    if (this.players[key] !== null || this.tokens[key] === null) return null;
+    this.tokens[key] = null;
+    this.awayUntil[key] = null;
+
+    const otherKey = key === 'white' ? 'black' : 'white';
+    if (!this.tokens[otherKey]) {
+      // Nobody left who could resume or see a result: start over.
+      this.resetAll();
+      return { ended: false };
     }
 
+    let ended = false;
     if (this.phase === 'playing') {
       this.phase = 'ended';
       this.result = {
-        result: 'opponentLeft',
+        result: 'abandoned',
         winner: color === 'w' ? 'b' : 'w',
-        reason: 'opponentLeft',
+        reason: 'abandoned',
       };
-      return { color, ended: true };
+      ended = true;
+    } else if (this.phase === 'config' || this.phase === 'setup') {
+      this.backToLobby();
     }
+    return { ended };
+  }
 
-    if (this.phase === 'config' || this.phase === 'setup') {
-      // The remaining player has no valid opponent anymore; drop back to lobby-wait
-      // and clear negotiation/setup progress (config preset is retained).
-      this.phase = 'lobby';
-      this.agreed = { white: false, black: false };
-      this.arrangements = { white: null, black: null };
-      this.ready = { white: false, black: false };
-      this.rematch = { white: false, black: false };
-      this.chess = null;
-      this.chaosBoard = null;
-      this.moveLog = [];
-      this.result = null;
-    }
-    return { color, ended: false };
+  /** config/setup -> lobby-wait: clear negotiation/setup progress. */
+  backToLobby() {
+    this.phase = 'lobby';
+    this.agreed = { white: false, black: false };
+    this.arrangements = { white: null, black: null };
+    this.ready = { white: false, black: false };
+    this.rematch = { white: false, black: false };
+    this.chess = null;
+    this.chaosBoard = null;
+    this.moveLog = [];
+    this.result = null;
+  }
+
+  /** ended -> fresh lobby for a NEW opponent (house rules back to classic). */
+  resetForNewOpponent() {
+    this.resetForRematch();
+    this.config = classicPreset();
+    this.mode = this.config.mode;
+    this.boardDims = { cols: 8, rows: 8 };
+    this.phase = 'lobby';
+  }
+
+  /** ms left in `color`'s reconnect window, or null when not away. */
+  awayMsLeft(color, now) {
+    const until = this.awayUntil[FogChessGame.keyOf(color)];
+    if (until === null) return null;
+    return Math.max(0, until - (now || Date.now()));
   }
 
   // ---- config / negotiation phase (CONTRACT-v2 C) ------------------------
@@ -317,6 +451,10 @@ class FogChessGame {
 
   /** setup -> playing. Routes board construction by mode. */
   startPlaying() {
+    this.gameCounter += 1;
+    this.gameId = this.gameCounter;
+    this.positionCounts = new Map();
+    this.halfmoveClock = 0;
     if (this.isChaos()) {
       this.chaosBoard = chaos.buildBoard(this.arrangements.white, this.arrangements.black, this.config);
       this.chess = null;
@@ -330,6 +468,9 @@ class FogChessGame {
     }
     this.turn = 'w';
     this.phase = 'playing';
+    if (this.isChaos()) {
+      this.positionCounts.set(chaos.positionKey(this.chaosBoard, this.turn), 1);
+    }
   }
 
   // ---- playing phase ------------------------------------------------------
@@ -435,6 +576,8 @@ class FogChessGame {
       capturedColor,
       captureSquare,
       promotion: move.promotion || null,
+      castle: move.flags && move.flags.includes('k') ? 'k'
+        : (move.flags && move.flags.includes('q') ? 'q' : null),
     };
     this.moveLog.push(record);
     this.turn = this.chess.turn();
@@ -449,7 +592,11 @@ class FogChessGame {
       result = { result: 'stalemate', winner: null, reason: 'stalemate' };
     } else if (this.chess.isDraw()) {
       ended = true;
-      result = { result: 'draw', winner: null, reason: 'draw' };
+      let reason = 'draw';
+      if (this.chess.isInsufficientMaterial()) reason = 'insufficientMaterial';
+      else if (this.chess.isThreefoldRepetition()) reason = 'threefold';
+      else if (this.chess.isDrawByFiftyMoves()) reason = 'fiftyMoves';
+      result = { result: 'draw', winner: null, reason };
     }
     if (ended) {
       this.phase = 'ended';
@@ -497,9 +644,28 @@ class FogChessGame {
     this.moveLog.push(record);
     this.turn = color === 'w' ? 'b' : 'w';
 
-    if (res.ended) {
+    let ended = res.ended;
+    let result = res.result;
+    if (!ended) {
+      // Draw rules: 50 moves each without a capture or pawn move, or the same
+      // position (same side to move) for the third time.
+      const pawnMove = !!(chaos.CATALOG[res.movedType] && chaos.CATALOG[res.movedType].pawn);
+      this.halfmoveClock = res.captured || pawnMove ? 0 : this.halfmoveClock + 1;
+      const key = chaos.positionKey(this.chaosBoard, this.turn);
+      const seen = (this.positionCounts.get(key) || 0) + 1;
+      this.positionCounts.set(key, seen);
+      if (seen >= chaos.REPETITION_LIMIT) {
+        ended = true;
+        result = { result: 'draw', winner: null, reason: 'threefold' };
+      } else if (this.halfmoveClock >= chaos.MOVE_LIMIT_PLIES) {
+        ended = true;
+        result = { result: 'draw', winner: null, reason: 'moveLimit' };
+      }
+    }
+
+    if (ended) {
       this.phase = 'ended';
-      this.result = res.result;
+      this.result = result;
     }
 
     return {
@@ -508,8 +674,8 @@ class FogChessGame {
       capture: res.captured
         ? { square: captureSquare, capturedType, capturedColor }
         : null,
-      ended: res.ended,
-      result: res.result,
+      ended,
+      result,
     };
   }
 
@@ -576,12 +742,17 @@ class FogChessGame {
     let moveLog = [];
     let inCheck = false;
     let checkSquare = null;
+    const ended = this.phase === 'ended';
 
-    if ((this.phase === 'playing' || this.phase === 'ended')) {
+    if ((this.phase === 'playing' || ended)) {
       const src = this.boardSource();
       if (src) {
         board = fog.filterBoard(src, viewerColor, this.boardDims);
-        moveLog = this.moveLog.map((r) => fog.filterMoveRecord(r, viewerColor, this.options));
+        // Once the game is over every piece is revealed anyway (gameOver), so the
+        // log names the opponent's pieces too. While playing it stays anonymized.
+        moveLog = ended
+          ? this.moveLog.map((r) => fog.revealMoveRecord(r, viewerColor))
+          : this.moveLog.map((r) => fog.filterMoveRecord(r, viewerColor, this.options));
       }
       if (!this.isChaos()) {
         const ci = fog.checkInfoFor(this.chess, viewerColor);
@@ -604,6 +775,11 @@ class FogChessGame {
       turn: this.turn,
       yourTurn: this.phase === 'playing' && this.turn === viewerColor,
       opponentConnected: this.socketOf(oppColor) !== null,
+      // ms left before an away opponent forfeits (null = not away).
+      opponentAwayMs: this.awayMsLeft(oppColor),
+      reconnectGraceMs: this.reconnectGraceMs,
+      gameId: this.gameId,
+      lastMove: this.lastMove(),
       yourReady: this.ready[role],
       opponentReady: this.ready[oppKey],
       inCheck,
@@ -612,6 +788,10 @@ class FogChessGame {
       moveLog,
       result: this.result,
     };
+
+    // Ended: carry the full reveal in the state itself, so a player who reloads
+    // after the game is over still gets the unfogged final board.
+    if (ended) state.gameOver = this.buildGameOver();
 
     if (this.phase === 'setup') {
       state.setup = {
@@ -625,6 +805,12 @@ class FogChessGame {
     }
 
     return state;
+  }
+
+  /** { from, to } of the latest move (squares only - already public to both). */
+  lastMove() {
+    const last = this.moveLog[this.moveLog.length - 1];
+    return last ? { from: last.from, to: last.to } : null;
   }
 
   /** Build the `gameOver` payload (full reveal). Chaos fen is null. */
@@ -642,4 +828,5 @@ class FogChessGame {
   }
 }
 
+FogChessGame.DEFAULT_RECONNECT_GRACE_MS = DEFAULT_RECONNECT_GRACE_MS;
 module.exports = FogChessGame;

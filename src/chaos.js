@@ -335,6 +335,25 @@ function applyMove(board, dims, config, color, from, to, promotion) {
   return { ok: true, captured, movedType, promotedTo, ended, result };
 }
 
+// ---- draw rules (threefold repetition + move limit) ----------------------
+// Chaos has no chess.js, so it tracks its own draw conditions. game.js keeps the
+// counters; these helpers define them.
+
+/** Plies without a capture or pawn move before the game is drawn (50 each). */
+const MOVE_LIMIT_PLIES = 100;
+/** Occurrences of the same position (same side to move) that draw the game. */
+const REPETITION_LIMIT = 3;
+
+/** positionKey(board, turn) -> stable string for repetition detection. */
+function positionKey(board, turn) {
+  const parts = [];
+  for (const sq of Object.keys(board).sort()) {
+    const p = board[sq];
+    if (p) parts.push(sq + (p.color === 'w' ? p.type.toUpperCase() : p.type));
+  }
+  return parts.join(',') + '|' + turn;
+}
+
 // ---- config: home region + validation (PLAN-v2 7, 8.4) -------------------
 
 function rosterTotal(roster) {
@@ -512,6 +531,7 @@ module.exports = {
   // board / rules
   isRoyal, countRoyals,
   movesFrom, allMoves, applyMove,
+  MOVE_LIMIT_PLIES, REPETITION_LIMIT, positionKey,
   promotionTypes, resolvePromotion,
   // config / setup
   validateConfig, homeRanks, homeRankCount, rosterTotal, isSupportedDims,
