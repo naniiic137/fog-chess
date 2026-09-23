@@ -33,9 +33,16 @@ html, body {
   display: flex; align-items: center; gap: 14px;
   padding: 6px 0 14px; border-bottom: 1px solid #2a2e3b; margin-bottom: 16px;
 }
-#topbar h1 { font-size: 22px; margin: 0; letter-spacing: 0.5px; }
+#topbar h1 { font-size: 22px; margin: 0; letter-spacing: 0.5px; white-space: nowrap; }
 #topActions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .sizeCtl { display: flex; align-items: center; gap: 6px; color: var(--ink-dim); font-size: 13px; }
+.iconBtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 30px; border-radius: 8px; cursor: pointer;
+  background: var(--panel2); color: var(--ink); border: 1px solid #3a4152;
+}
+.iconBtn:hover { background: #2d3243; }
+.iconBtn[aria-pressed="false"] { color: var(--ink-dim); }
 .sizeCtl select {
   background: var(--panel2); color: var(--ink); border: 1px solid #3a4152;
   border-radius: 8px; padding: 5px 8px; font-size: 13px; cursor: pointer;
@@ -53,6 +60,28 @@ html, body {
 #youAre.b { color: var(--ink); background: #3a4152; border: 1px solid #566; }
 
 .hidden { display: none !important; }
+
+/* connection / opponent-away banner */
+.netBanner {
+  margin: -6px 0 14px; padding: 10px 14px; border-radius: 8px;
+  background: #3a3220; color: #f6dfa0; font-weight: 600; font-size: 14px;
+  border-left: 4px solid var(--highlight);
+}
+.netBanner.err { background: #3b2322; color: #f5c2bd; border-left-color: var(--danger); }
+
+/* join link + QR on the waiting screen */
+.joinBox { margin-top: 18px; }
+.joinLead { color: var(--ink-dim); line-height: 1.5; margin: 0 0 10px; }
+.joinRow { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.joinUrl {
+  font-family: "Consolas", monospace; font-size: 15px; color: #cfe0ff;
+  background: var(--panel2); padding: 7px 10px; border-radius: 8px;
+  word-break: break-all; text-decoration: none;
+}
+.joinQr {
+  display: block; margin: 14px auto 6px; width: 180px; height: 180px;
+  background: #fff; border-radius: 8px; padding: 6px;
+}
 
 /* screens */
 .screen { display: none; }
@@ -100,17 +129,28 @@ body[data-screen="end"]      #screen-end { display: block; }
   display: grid;
   grid-template-columns: repeat(var(--cols), 1fr);
   grid-template-rows: repeat(var(--rows), 1fr);   /* equal rows: a big glyph can't stretch its row */
-  width: min(94vw, var(--board-max));
+  /* Fit the column, the chosen size AND the viewport height (minus the chrome
+   * above/below the board), so "Large" still fits a 1280x860 laptop. */
+  --board-chrome: 150px;
+  width: min(100%, var(--board-max), max(260px, calc((100vh - var(--board-chrome)) * var(--cols) / var(--rows))));
+  width: min(100%, var(--board-max), max(260px, calc((100dvh - var(--board-chrome)) * var(--cols) / var(--rows))));
   aspect-ratio: 1 / 1;
   border: 3px solid #2a2e3b; border-radius: 6px; overflow: hidden;
   user-select: none;
+  container-type: inline-size;           /* glyphs scale with the board (cqw) */
 }
+#screen-game .board { --board-chrome: 140px; }
+#screen-end .board { --board-chrome: 200px; }
+/* the connection / opponent-away banner takes ~50px above the board */
+body.has-banner #screen-game .board { --board-chrome: 195px; }
+body.has-banner #screen-end .board { --board-chrome: 255px; }
 .sq {
   position: relative;
   min-width: 0; min-height: 0;           /* let the grid track dictate size, not the glyph */
   display: flex; align-items: center; justify-content: center;
   /* scales down automatically for wider (10-col) boards via --cols */
   font-size: min(calc(50vw / var(--cols, 8)), calc(var(--board-max) / var(--cols, 8) * 0.72));
+  font-size: calc(100cqw / var(--cols, 8) * 0.72);
   line-height: 1;
   overflow: hidden;
   cursor: default;
@@ -135,10 +175,17 @@ body[data-screen="end"]      #screen-end { display: block; }
      0 0 3px rgba(0,0,0,0.35);
 }
 .piece.b {
-  color: #14171d;
+  color: #111318;
   text-shadow:
-    -0.6px -0.6px 0 rgba(255,255,255,0.35), 0.6px -0.6px 0 rgba(255,255,255,0.35),
-    -0.6px  0.6px 0 rgba(255,255,255,0.35), 0.6px  0.6px 0 rgba(255,255,255,0.35);
+    -1px -1px 0 rgba(255,255,255,0.55), 1px -1px 0 rgba(255,255,255,0.55),
+    -1px  1px 0 rgba(255,255,255,0.55), 1px  1px 0 rgba(255,255,255,0.55);
+}
+/* Stronger halo where contrast is lowest: dark squares and dark UI panels. */
+.sq.dark .piece.b, .trayItem .piece.b, .rosterIcon .piece.b, .promoBtn .piece.b, .inHand .piece.b {
+  text-shadow:
+    -1.2px -1.2px 0 #e9edf2, 1.2px -1.2px 0 #e9edf2,
+    -1.2px  1.2px 0 #e9edf2, 1.2px  1.2px 0 #e9edf2,
+     0 0 4px rgba(255,255,255,0.45);
 }
 
 /* ===== fairy pieces (OWN pieces + end-screen reveal only) =====
@@ -227,7 +274,7 @@ body[data-screen="end"]      #screen-end { display: block; }
 .setupGrid {
   grid-template-rows: repeat(2, 1fr);
   aspect-ratio: 4 / 1;
-  width: min(90vw, var(--board-max));
+  width: min(100%, var(--board-max));
   margin: 14px 0;
 }
 .setupControls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -241,17 +288,21 @@ body[data-screen="end"]      #screen-end { display: block; }
 }
 .trayItem {
   aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center;
-  font-size: 34px; background: var(--panel2); border-radius: 8px; cursor: pointer;
+  font-size: 30px; background: var(--panel2); border-radius: 8px; cursor: pointer;
   position: relative; transition: box-shadow 0.12s, transform 0.05s;
+  min-width: 0; overflow: hidden;
 }
 .trayItem:not(.empty):hover { box-shadow: inset 0 0 0 2px #3a4152; }
 .trayItem.selected {
   box-shadow: inset 0 0 0 3px var(--accent2), 0 0 10px rgba(63,178,127,0.4);
   transform: translateY(-1px);
 }
+/* remaining-count pill, tucked into the corner so it never covers the glyph */
 .trayItem .count {
-  position: absolute; bottom: 2px; right: 5px; font-size: 12px;
-  color: var(--ink-dim); font-weight: 700;
+  position: absolute; top: 2px; right: 2px;
+  font-size: 10px; line-height: 14px; padding: 0 4px; border-radius: 7px;
+  background: rgba(10, 12, 16, 0.75); color: #cfd5e2; font-weight: 700;
+  pointer-events: none;
 }
 .trayItem.empty { opacity: 0.28; cursor: default; }
 .sq.dropTarget { outline: 3px dashed var(--accent2); outline-offset: -3px; }
@@ -259,7 +310,7 @@ body[data-screen="end"]      #screen-end { display: block; }
 
 /* ===== game / end layout ===== */
 .gameWrap, .endWrap { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
-.boardCol { flex: 1 1 560px; }
+.boardCol { flex: 1 1 560px; min-width: 0; }
 .sidePanel {
   flex: 1 1 300px; max-width: 380px; background: var(--panel);
   border-radius: 12px; padding: 14px 16px;
@@ -279,16 +330,33 @@ body[data-screen="end"]      #screen-end { display: block; }
 }
 
 .moveLog {
-  list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto;
-  font-family: "Consolas", monospace; font-size: 13px;
+  margin: 0; padding: 0; max-height: 300px; overflow-y: auto;
+  font-size: 13px; line-height: 1.35;
 }
-.moveLog li {
-  padding: 3px 6px; border-bottom: 1px solid #262b38; display: flex; gap: 8px;
+.logRow {
+  display: grid; grid-template-columns: 28px 1fr 1fr; gap: 8px;
+  padding: 4px 6px; border-bottom: 1px solid #262b38;
 }
-.moveLog li .ply { color: var(--ink-dim); min-width: 26px; }
-.moveLog li.own { color: var(--ink); }
-.moveLog li.opp { color: var(--ink-dim); font-style: italic; }
-.moveLog li.cap { color: var(--highlight); }
+.logHead {
+  position: sticky; top: 0; background: var(--panel); z-index: 1;
+  color: var(--ink-dim); font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.logNum { color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.logCell { min-width: 0; overflow-wrap: anywhere; }
+.logCell.own { color: var(--ink); }
+.logCell.opp { color: var(--ink-dim); font-style: italic; }
+.logCell.revealed { font-style: normal; }
+.logCell.cap { color: var(--highlight); }
+.logEmpty { color: var(--ink-dim); padding: 8px 6px; font-size: 13px; }
+
+/* end screen */
+.endTitle { margin: 4px 0 6px; }
+.endTitle.win { color: #7fe0a8; }
+.endTitle.loss { color: #f19a92; }
+.endTitle.draw { color: var(--ink); }
+.endReason { margin: 0 0 12px; color: var(--ink); line-height: 1.5; }
+.endActions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .pinLegend { margin-top: 16px; border-top: 1px solid #2a2e3b; padding-top: 12px; }
 .pinLegend h4 { margin: 0 0 6px; }
@@ -431,3 +499,27 @@ body[data-screen="end"]      #screen-end { display: block; }
 .promoBtn .piece { font-size: 22px; }
 .promoLbl { font-size: 14px; }
 .trayGlyph { display: inline-flex; align-items: center; justify-content: center; }
+
+/* ===== phones / narrow screens ===== */
+@media (max-width: 640px) {
+  html, body { font-size: 14px; }
+  #app { padding: 8px 12px 28px; }
+  #topbar { gap: 8px; padding-bottom: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  #topbar h1 { font-size: 18px; }
+  .badge { padding: 3px 8px; font-size: 12px; }
+  /* On a phone the board is limited by the screen width, so the size picker
+   * has no effect: hide it and keep the header on one line. */
+  .sizeCtl { display: none; }
+  #topbar { flex-wrap: nowrap; }
+
+  .centerCard { margin-top: 4vh; padding: 26px 18px; }
+  .setupWrap, .gameWrap, .endWrap, .configWrap { gap: 16px; }
+  .setupLeft, .setupRight, .boardCol, .sidePanel, .configMain, .configSide {
+    flex: 1 1 100%; max-width: 100%;
+  }
+  .configSide { position: static; }
+  .tray { grid-template-columns: repeat(6, 1fr); padding: 8px; min-height: 0; }
+  .trayItem { font-size: 26px; }
+  .setupControls .btn { padding: 8px 12px; }
+  .logRow { grid-template-columns: 24px 1fr 1fr; gap: 6px; }
+}

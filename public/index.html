@@ -1,6 +1,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Fog Chess</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%2356607a'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%232c3242'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="style.css" />
 
 <div id="app">
@@ -9,8 +10,10 @@
     <div id="youAre" class="badge hidden"></div>
     <div id="modeBadge" class="badge hidden"></div>
     <div id="topActions">
-      <label class="sizeCtl">Board
-        <select id="boardSize">
+      <button id="soundBtn" class="iconBtn" type="button" aria-pressed="true"
+              aria-label="Sound on" title="Sound on (click to mute)"></button>
+      <label class="sizeCtl"><span class="sizeLbl">Board</span>
+        <select id="boardSize" aria-label="Board size">
           <option value="440">Small</option>
           <option value="560">Normal</option>
           <option value="680" selected>Large</option>
@@ -20,11 +23,22 @@
     </div>
   </header>
 
+  <div id="netBanner" class="netBanner hidden" role="status" aria-live="polite"></div>
+
   <!-- ===================== LOBBY ===================== -->
   <section id="screen-lobby" class="screen">
     <div class="centerCard">
       <div class="spinner"></div>
       <p id="lobbyMsg">Connecting…</p>
+      <div id="joinBox" class="joinBox hidden">
+        <p class="joinLead">Invite your opponent: open this link on another device on the same Wi-Fi, or scan the code.</p>
+        <div class="joinRow">
+          <a id="joinUrl" class="joinUrl" href="#" target="_blank" rel="noopener"></a>
+          <button id="copyJoinBtn" class="btn small" type="button">Copy link</button>
+        </div>
+        <img id="joinQr" class="joinQr" alt="QR code for the join link" width="180" height="180" />
+        <p id="joinOther" class="hint small"></p>
+      </div>
     </div>
   </section>
 
@@ -103,14 +117,12 @@
           Click a placed piece to remove it. (Dragging still works too.) Full
           freedom — you may even put pawns on your back rank.
         </p>
-        <p class="hint small">
-          Note: a pawn placed on its own back rank cannot double-step; it advances
-          one square at a time until it reaches its 2nd rank. This is intended.
-        </p>
+        <p id="setupRules" class="hint small"></p>
         <div id="setupBoard" class="board setupGrid"></div>
         <div class="setupControls">
           <div id="trayCount" class="badge">0 / 16 placed</div>
           <button id="autoFillBtn" class="btn ghost">Standard setup</button>
+          <button id="randomBtn" class="btn ghost" title="Shuffle your pieces (pawns stay in front)">Randomize</button>
           <button id="clearSetupBtn" class="btn ghost">Clear</button>
           <button id="readyBtn" class="btn primary" disabled>Ready</button>
         </div>
@@ -139,7 +151,7 @@
             <button id="resignBtn" class="btn danger small">Resign</button>
           </div>
         </div>
-        <ol id="moveLog" class="moveLog"></ol>
+        <div id="moveLog" class="moveLog"></div>
         <div class="pinLegend">
           <h4>Your pins</h4>
           <p class="hint small">
@@ -158,16 +170,19 @@
     <div class="endWrap">
       <div class="boardCol">
         <h2 id="endResult">Game over</h2>
-        <p id="endReason" class="hint"></p>
+        <p id="endReason" class="endReason"></p>
         <div id="endBoard" class="board"></div>
       </div>
       <aside class="sidePanel">
         <div class="panelHead"><h3>Full reveal</h3></div>
-        <p class="hint">Both arrangements are now visible.</p>
+        <p class="hint">Every piece on both sides is now shown, and the move log names them all.</p>
         <div id="rematchStatus" class="statusLine"></div>
-        <button id="rematchBtn" class="btn primary">Rematch</button>
+        <div class="endActions">
+          <button id="rematchBtn" class="btn primary">Rematch</button>
+          <button id="copyFenBtn" class="btn ghost hidden" title="Copy the final position as a FEN string, e.g. for an analysis board">Copy position</button>
+        </div>
         <h3 style="margin-top:18px">Final move log</h3>
-        <ol id="endMoveLog" class="moveLog"></ol>
+        <div id="endMoveLog" class="moveLog"></div>
       </aside>
     </div>
   </section>
