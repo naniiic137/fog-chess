@@ -5,6 +5,8 @@
   "name": "fog-chess",
   "main": "worker/index.js",
   "compatibility_date": "2026-10-01",
+  // The workers.dev address is the game server for the Pages site, so keep it on.
+  "workers_dev": true,
 
   // public/ is served as static files; the Worker only runs for paths that
   // are not files (/api/rooms, /ws).
