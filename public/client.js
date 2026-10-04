@@ -1155,6 +1155,11 @@
 
   var joinInfo = null;
   function isLocalHost(h) { return h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1"; }
+  /** A home-network address (npm start on a LAN), as opposed to a public site. */
+  function isLanHost(h) {
+    return isLocalHost(h) || /\.local$/.test(h) ||
+      /^(10|127)\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h);
+  }
   function showJoinBox(show) {
     var box = $("joinBox");
     if (!show) { box.classList.add("hidden"); return; }
@@ -1175,6 +1180,9 @@
         $("joinQr").setAttribute("src", qrDataUrl(url));
       }
       $("roomCode").textContent = ROOM;
+      $("joinLead").textContent = isLanHost(new URL(url).hostname)
+        ? "Invite your opponent: open this link on another device on the same Wi-Fi, or scan the code."
+        : "Invite your opponent: send them this link, or let them scan the code. It works from anywhere.";
       $("joinOther").textContent = others.length ? "Other addresses: " + others.join("  ·  ") : "";
       box.classList.remove("hidden");
     }
