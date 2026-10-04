@@ -8,10 +8,13 @@
  *
  * Pins are 100% client-side and are never emitted over the socket.
  *
- * RECONNECTION: the server issues a seat token on `assigned`. It is kept in
- * sessionStorage (this tab, survives reloads) and localStorage (survives closing
- * the tab) and sent back in the socket.io handshake, so a reload or a dropped
- * connection resumes the same seat within the server's reconnect window.
+ * ROOMS: every match lives in its own room (`/?room=CODE`). Without a room the
+ * start screen offers "Create a match" / "Join with a code".
+ *
+ * RECONNECTION: the server issues a seat token on `assigned`. It is kept per room
+ * in sessionStorage (this tab, survives reloads) and localStorage (survives closing
+ * the tab) and sent back in the `hello` message (public/net.js), so a reload or a
+ * dropped connection resumes the same seat within the server's reconnect window.
  */
 (function () {
   "use strict";
@@ -43,8 +46,26 @@
   function isFairy(t) { return FAIRY_SET[t] === 1; }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
-  // ---------- seat token (reconnection) ----------
-  var TOKEN_KEY = "fogChessToken";
+  // ---------- room code (from ?room=CODE) ----------
+  // Same alphabet as the server (src/room.js): no 0/O, 1/I or L.
+  var ROOM_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{6}$/;
+  /** Turn what the user typed or pasted (a code or a whole link) into a code, or null. */
+  function parseRoomCode(text) {
+    var t = String(text || "").trim();
+    var m = /[?&]room=([^&#\s]+)/i.exec(t);
+    if (m) { try { t = decodeURIComponent(m[1]); } catch (e) { return null; } }
+    t = t.toUpperCase().replace(/[\s-]+/g, "");
+    return ROOM_RE.test(t) ? t : null;
+  }
+  var roomParam = new URLSearchParams(location.search).get("room");
+  var ROOM = roomParam ? parseRoomCode(roomParam) : null;
+  if (ROOM && roomParam !== ROOM && window.history && history.replaceState) {
+    history.replaceState(null, "", "/?room=" + ROOM); // tidy a lower-case / spaced code
+  }
+  function inviteUrl(base) { return (base || location.origin) + "/?room=" + ROOM; }
+
+  // ---------- seat token (reconnection), one per room ----------
+  var TOKEN_KEY = "fogChessToken:" + ROOM;
   function storageGet(store, key) { try { return window[store].getItem(key); } catch (e) { return null; } }
   function storageSet(store, key, val) { try { window[store].setItem(key, val); } catch (e) {} }
   function storageDel(store, key) { try { window[store].removeItem(key); } catch (e) {} }
@@ -60,7 +81,11 @@
   }
 
   // ---------- client state ----------
-  var socket = io({ auth: function (cb) { cb(handshakeAuth()); } });
+  // No room: nothing to connect to (the start screen is shown instead).
+  var socket = ROOM
+    ? FogNet.connect((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws?room=" + ROOM,
+                     { auth: handshakeAuth })
+    : { on: function () {}, emit: function () {} };
   var yourColor = null;          // "w" | "b"
   var lastState = null;          // last authoritative `state`
   var dims = { cols: 8, rows: 8 };// current board dims (drives all geometry)
@@ -511,7 +536,7 @@
 
   // Keep the in-progress arrangement across a reload (this tab only).
   function setupDraftKey() {
-    return "fogSetup:" + (lastState ? lastState.configVersion : "") + ":" + yourColor;
+    return "fogSetup:" + ROOM + ":" + (lastState ? lastState.configVersion : "") + ":" + yourColor;
   }
   function saveSetupDraft() {
     storageSet("sessionStorage", setupDraftKey(), JSON.stringify(placement));
@@ -914,10 +939,10 @@
 
   // Pins survive a reload of this tab (scoped to the server's gameId).
   function storePins() {
-    if (pinsGameId !== null) storageSet("sessionStorage", "fogPins:" + pinsGameId, JSON.stringify(pins));
+    if (pinsGameId !== null) storageSet("sessionStorage", "fogPins:" + ROOM + ":" + pinsGameId, JSON.stringify(pins));
   }
   function loadPins(gameId) {
-    var raw = storageGet("sessionStorage", "fogPins:" + gameId);
+    var raw = storageGet("sessionStorage", "fogPins:" + ROOM + ":" + gameId);
     try { return raw ? (JSON.parse(raw) || {}) : {}; } catch (e) { return {}; }
   }
 
@@ -1098,30 +1123,63 @@
   }
 
   // =====================================================================
+  //  START SCREEN (create a match / join with a code)
+  // =====================================================================
+  function createMatch(onError) {
+    fetch("/api/rooms", { method: "POST" })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (d) {
+        if (!d || !ROOM_RE.test(d.room)) throw new Error("bad room code");
+        location.assign("/?room=" + d.room);
+      })
+      .catch(function () { onError("Could not create a match. Check your connection and try again."); });
+  }
+
+  function showStart(msg) {
+    setScreen("start");
+    $("startMsg").textContent = msg || "";
+  }
+
+  // =====================================================================
   //  JOIN LINK + QR (waiting screen)
   // =====================================================================
+  /** The invite link as an SVG QR code (made in the browser by vendor/qrcode.js). */
+  function qrDataUrl(text) {
+    if (typeof qrcode !== "function") return "";
+    var qr = qrcode(0, "M");
+    qr.addData(text);
+    qr.make();
+    return "data:image/svg+xml;charset=utf-8," +
+      encodeURIComponent(qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true }));
+  }
+
   var joinInfo = null;
   function isLocalHost(h) { return h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1"; }
   function showJoinBox(show) {
     var box = $("joinBox");
     if (!show) { box.classList.add("hidden"); return; }
     function fill() {
+      // Opened as localhost: invite with the LAN address instead (npm start only).
       var urls = (joinInfo && joinInfo.urls) || [];
-      var url = location.origin;
+      var url = inviteUrl();
       var others = [];
       if (isLocalHost(location.hostname) && urls.length) {
-        url = urls[0];
-        others = urls.slice(1);
+        url = inviteUrl(urls[0]);
+        others = urls.slice(1).map(function (u) { return inviteUrl(u); });
       }
       var a = $("joinUrl");
       a.textContent = url;
       a.href = url;
-      var qr = "/qr.svg?text=" + encodeURIComponent(url);
-      if ($("joinQr").getAttribute("src") !== qr) $("joinQr").setAttribute("src", qr);
+      if (a.dataset.qrFor !== url) {
+        a.dataset.qrFor = url;
+        $("joinQr").setAttribute("src", qrDataUrl(url));
+      }
+      $("roomCode").textContent = ROOM;
       $("joinOther").textContent = others.length ? "Other addresses: " + others.join("  ·  ") : "";
       box.classList.remove("hidden");
     }
     if (joinInfo) { fill(); return; }
+    if (!isLocalHost(location.hostname)) { joinInfo = { urls: [] }; fill(); return; }
     fetch("/api/info").then(function (r) { return r.json(); })
       .then(function (info) { joinInfo = info; fill(); })
       .catch(function () { joinInfo = { urls: [] }; fill(); });
@@ -1188,9 +1246,9 @@
     if (!lastState) { setScreen("lobby"); $("lobbyMsg").textContent = "Connected. Waiting…"; }
   });
   socket.on("disconnect", function (reason) {
-    // "io server disconnect" = we were retired (another tab took the seat);
+    // "server" = we were rejected or retired (another tab took the seat);
     // anything else auto-reconnects with our token.
-    if (reason === "io server disconnect") return;
+    if (reason === "server") return;
     connectionLost = true;
     updateNetBanner();
   });
@@ -1214,17 +1272,22 @@
     connectionLost = false;
     awayDeadline = null;
     updateNetBanner();
+    var title = "This match is full";
+    var msg = "Two players are already in this match. You can start your own match instead.";
     if (reason === "replaced") {
       // Another tab of this browser took the seat over; don't reclaim it from here.
       storageDel("sessionStorage", TOKEN_KEY);
-      $("rejectedMsg").textContent = "This game is now open in another tab or window. Continue there, or reload this page to try again.";
+      title = "Open in another tab";
+      msg = "This game is now open in another tab or window. Continue there, or reload this page to try again.";
     } else if (reason === "reconnecting") {
-      $("rejectedMsg").textContent = "A game is in progress and one player is reconnecting. Try again in a minute.";
-    } else if (reason === "full") {
-      $("rejectedMsg").textContent = "Match is full — two players are already connected.";
-    } else {
-      $("rejectedMsg").textContent = "Connection rejected.";
+      title = "This match is busy";
+      msg = "A game is in progress here and one player is reconnecting. Try again in a minute, or start your own match.";
+    } else if (reason !== "full") {
+      title = "Could not join";
+      msg = "Connection rejected.";
     }
+    $("rejectedTitle").textContent = title;
+    $("rejectedMsg").textContent = msg;
   });
 
   socket.on("waiting", function (d) {
@@ -1475,6 +1538,28 @@
     });
   });
 
+  // start screen + "create my own" on the rejected screen
+  $("createBtn").addEventListener("click", function () {
+    var btn = $("createBtn");
+    btn.disabled = true;
+    $("startMsg").textContent = "";
+    createMatch(function (msg) { btn.disabled = false; $("startMsg").textContent = msg; });
+  });
+  $("joinForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var code = parseRoomCode($("codeInput").value);
+    if (!code) {
+      $("startMsg").textContent = "That code doesn't look right. It has 6 letters and numbers, like ABC234.";
+      return;
+    }
+    location.assign("/?room=" + code);
+  });
+  $("rejectedCreateBtn").addEventListener("click", function () {
+    var btn = $("rejectedCreateBtn");
+    btn.disabled = true;
+    createMatch(function (msg) { btn.disabled = false; toast(msg, true); });
+  });
+
   $("copyJoinBtn").addEventListener("click", function () {
     copyText($("joinUrl").textContent, function (ok) {
       toast(ok ? "Link copied" : "Could not copy the link", !ok);
@@ -1511,5 +1596,6 @@
   $("pinCancelBtn").addEventListener("click", closePinModal);
 
   // initial screen
-  setScreen("lobby");
+  if (ROOM) setScreen("lobby");
+  else showStart(roomParam ? "That match code isn't valid. Check the link, or create a new match." : "");
 })();

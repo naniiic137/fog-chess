@@ -82,9 +82,23 @@ html, body {
   display: block; margin: 14px auto 6px; width: 180px; height: 180px;
   background: #fff; border-radius: 8px; padding: 6px;
 }
+.roomCode { font-family: "Consolas", monospace; letter-spacing: 2px; color: var(--ink); }
+
+/* start screen: create a match / join with a code */
+#screen-start h2 { margin: 0 0 10px; }
+.bigBtn { font-size: 16px; padding: 12px 22px; margin: 8px 0 22px; }
+.codeForm { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.codeInput {
+  width: 150px; padding: 8px 10px; border-radius: 8px; font-size: 16px;
+  font-family: "Consolas", monospace; letter-spacing: 2px; text-transform: uppercase; text-align: center;
+  background: var(--panel2); color: var(--ink); border: 1px solid #3a4152;
+}
+#startMsg:empty { display: none; }
+#rejectedCreateBtn { margin-top: 10px; }
 
 /* screens */
 .screen { display: none; }
+body[data-screen="start"]    #screen-start,
 body[data-screen="lobby"]    #screen-lobby,
 body[data-screen="rejected"] #screen-rejected,
 body[data-screen="config"]   #screen-config,

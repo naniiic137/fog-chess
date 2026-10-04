@@ -25,18 +25,39 @@
 
   <div id="netBanner" class="netBanner hidden" role="status" aria-live="polite"></div>
 
+  <!-- ===================== START (no room yet) ===================== -->
+  <section id="screen-start" class="screen">
+    <div class="centerCard">
+      <h2>Play Fog Chess</h2>
+      <p class="joinLead">Chess where you can see where the enemy pieces are, but not what they are.
+        Create a match and send the link to a friend.</p>
+      <button id="createBtn" class="btn primary bigBtn" type="button">Create a match</button>
+      <form id="joinForm" class="codeForm" autocomplete="off">
+        <label for="codeInput" class="hint small">Have a code? Join with it:</label>
+        <div class="joinRow">
+          <input id="codeInput" class="codeInput" type="text" inputmode="text" maxlength="12"
+                 placeholder="ABC234" spellcheck="false" autocapitalize="characters" />
+          <button id="joinCodeBtn" class="btn" type="submit">Join</button>
+        </div>
+      </form>
+      <p id="startMsg" class="statusLine err"></p>
+    </div>
+  </section>
+
   <!-- ===================== LOBBY ===================== -->
   <section id="screen-lobby" class="screen">
     <div class="centerCard">
       <div class="spinner"></div>
       <p id="lobbyMsg">Connecting…</p>
       <div id="joinBox" class="joinBox hidden">
-        <p class="joinLead">Invite your opponent: open this link on another device on the same Wi-Fi, or scan the code.</p>
+        <p class="joinLead">Invite your opponent: send them this link, or let them scan the code.
+          It works from anywhere, not only on your Wi-Fi.</p>
         <div class="joinRow">
           <a id="joinUrl" class="joinUrl" href="#" target="_blank" rel="noopener"></a>
           <button id="copyJoinBtn" class="btn small" type="button">Copy link</button>
         </div>
-        <img id="joinQr" class="joinQr" alt="QR code for the join link" width="180" height="180" />
+        <img id="joinQr" class="joinQr" alt="QR code for the invite link" width="180" height="180" />
+        <p class="hint small">Match code: <b id="roomCode" class="roomCode"></b></p>
         <p id="joinOther" class="hint small"></p>
       </div>
     </div>
@@ -45,8 +66,9 @@
   <!-- ===================== REJECTED ===================== -->
   <section id="screen-rejected" class="screen">
     <div class="centerCard">
-      <h2>Match is full</h2>
-      <p id="rejectedMsg">Two players are already connected.</p>
+      <h2 id="rejectedTitle">This match is full</h2>
+      <p id="rejectedMsg">Two players are already in this match.</p>
+      <button id="rejectedCreateBtn" class="btn primary" type="button">Create my own match</button>
     </div>
   </section>
 
@@ -220,5 +242,6 @@
   </div>
 </div>
 
-<script src="/socket.io/socket.io.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script src="net.js"></script>
 <script src="client.js"></script>
