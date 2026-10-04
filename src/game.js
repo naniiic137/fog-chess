@@ -13,7 +13,6 @@
 // boards. game.js contains NO movement math — it routes by mode. Classic remains
 // behaviorally identical to v1 from `setup` onward.
 
-const crypto = require('crypto');
 const { Chess } = require('chess.js');
 const { validateArrangement: validateClassicArrangement, buildFen, COMPOSITION } = require('./fen');
 const fog = require('./fog');
@@ -26,13 +25,16 @@ const chaos = require('./chaos');
 // drops keeps its seat reserved for `reconnectGraceMs`; presenting the token again
 // within that window resumes the seat (same color, same fogged view). Only when
 // the window expires is the seat released - mid-game that is a loss by
-// abandonment. game.js stores deadlines; server.js owns the actual timers.
+// abandonment. game.js stores deadlines; src/room.js owns the actual timers.
 
 const DEFAULT_RECONNECT_GRACE_MS = 60 * 1000;
 const TOKEN_RE = /^[a-f0-9]{32}$/;
 
+// Web Crypto (global in Node 20+ and in Cloudflare Workers), so this module runs
+// unchanged on both.
 function newToken() {
-  return crypto.randomBytes(16).toString('hex');
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 const CLASSIC_DIMS = { cols: 8, rows: 8 };

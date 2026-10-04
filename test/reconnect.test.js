@@ -1,24 +1,17 @@
 'use strict';
 
 // Reconnection, abandonment timeout and the end-state reveal, exercised through
-// real socket.io clients against an in-process server.
+// real WebSocket clients against an in-process server.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { startServer, connect, startClassicGame, play, sleep } = require('./helpers');
+const { startServer, connect, startClassicGame, play, assertFogged: fogged, sleep } = require('./helpers');
 
 const GRACE_MS = 400;
 
-/** No square of `board` may expose a type/color of `oppColor` (fog invariant). */
+/** No square of `board` may expose a type/color of the opponent (fog invariant). */
 function assertFogged(board, viewerColor) {
-  for (const [sq, cell] of Object.entries(board)) {
-    if (!cell) continue;
-    if (cell.occupied) {
-      assert.deepEqual(Object.keys(cell), ['occupied'], `opponent square ${sq} leaks data`);
-    } else {
-      assert.equal(cell.color, viewerColor, `square ${sq} shows an opponent piece type`);
-    }
-  }
+  fogged(assert, board, viewerColor);
 }
 
 function countTypes(board, color) {
@@ -28,7 +21,7 @@ function countTypes(board, color) {
 test('reload mid-game: seat is held, opponent is told, fogged view is restored', async (t) => {
   const srv = await startServer({ reconnectGraceMs: GRACE_MS * 5 });
   t.after(() => srv.close());
-  const { white, black, whiteToken } = await startClassicGame(srv.url);
+  const { room, white, black, whiteToken } = await startClassicGame(srv);
   await play(white, black, 'e2', 'e4');
 
   white.close();
@@ -38,13 +31,13 @@ test('reload mid-game: seat is held, opponent is told, fogged view is restored',
   assert.equal(away.result, null);
 
   // A stranger cannot take the reserved seat meanwhile.
-  const stranger = connect(srv.url);
+  const stranger = connect(srv, room);
   const rej = await stranger.waitFor('rejected');
   assert.equal(rej.reason, 'reconnecting');
   stranger.close();
 
   // White comes back with its token.
-  const white2 = connect(srv.url, { token: whiteToken });
+  const white2 = connect(srv, room, { token: whiteToken });
   const assigned = await white2.waitFor('assigned');
   assert.equal(assigned.color, 'w');
   assert.equal(assigned.resumed, true);
@@ -78,7 +71,7 @@ test('reload mid-game: seat is held, opponent is told, fogged view is restored',
 test('a player who stays away past the window loses by abandonment, with full reveal', async (t) => {
   const srv = await startServer({ reconnectGraceMs: GRACE_MS });
   t.after(() => srv.close());
-  const { white, black, whiteToken } = await startClassicGame(srv.url);
+  const { room, white, black, whiteToken } = await startClassicGame(srv);
   await play(white, black, 'd2', 'd4');
 
   white.close();
@@ -97,7 +90,7 @@ test('a player who stays away past the window loses by abandonment, with full re
 
   // Coming back after the window: the old token no longer owns a seat, so this
   // is a newcomer, who gets a fresh match rather than the old end screen.
-  const late = connect(srv.url, { token: whiteToken });
+  const late = connect(srv, room, { token: whiteToken });
   const assigned = await late.waitFor('assigned');
   assert.equal(assigned.resumed, false);
   assert.notEqual(assigned.token, whiteToken);
@@ -114,12 +107,12 @@ test('a player who stays away past the window loses by abandonment, with full re
 test('game over survives a reload: ended state carries the full reveal and named log', async (t) => {
   const srv = await startServer({ reconnectGraceMs: GRACE_MS * 5 });
   t.after(() => srv.close());
-  const { white, black, whiteToken } = await startClassicGame(srv.url);
+  const { room, white, black, whiteToken } = await startClassicGame(srv);
   await play(white, black, 'e2', 'e4');
   await play(black, white, 'd7', 'd5');
   await play(white, black, 'e4', 'd5');
 
-  black.socket.emit('resign');
+  black.emit('resign');
   const over = await white.waitFor('gameOver');
   assert.equal(over.result, 'resign');
   assert.equal(over.winner, 'w');
@@ -128,7 +121,7 @@ test('game over survives a reload: ended state carries the full reveal and named
   white.close();
   await black.waitFor('state', (s) => s.phase === 'ended' && s.opponentConnected === false);
 
-  const white2 = connect(srv.url, { token: whiteToken });
+  const white2 = connect(srv, room, { token: whiteToken });
   const assigned = await white2.waitFor('assigned');
   assert.equal(assigned.resumed, true);
   const st = await white2.waitFor('state', (s) => s.phase === 'ended');
@@ -154,14 +147,14 @@ test('game over survives a reload: ended state carries the full reveal and named
 test('same tab reconnecting before the old socket dropped takes the seat over', async (t) => {
   const srv = await startServer({ reconnectGraceMs: GRACE_MS * 5 });
   t.after(() => srv.close());
-  const { white, black, whiteToken } = await startClassicGame(srv.url);
+  const { room, white, black, whiteToken } = await startClassicGame(srv);
 
   // Without the takeover flag a live seat is not stolen (e.g. a copied token).
-  const copy = connect(srv.url, { token: whiteToken });
+  const copy = connect(srv, room, { token: whiteToken });
   assert.equal((await copy.waitFor('rejected')).reason, 'full');
   copy.close();
 
-  const again = connect(srv.url, { token: whiteToken, takeover: true });
+  const again = connect(srv, room, { token: whiteToken, takeover: true });
   const assigned = await again.waitFor('assigned');
   assert.equal(assigned.color, 'w');
   assert.equal(assigned.resumed, true);
@@ -177,17 +170,19 @@ test('same tab reconnecting before the old socket dropped takes the seat over', 
   white.close();
 });
 
-test('both players gone past the window resets to an empty lobby', async (t) => {
+test('both players gone past the window frees the room; the code then starts an empty lobby', async (t) => {
   const srv = await startServer({ reconnectGraceMs: GRACE_MS });
   t.after(() => srv.close());
-  const { white, black } = await startClassicGame(srv.url);
+  const { room, white, black } = await startClassicGame(srv);
+  const match = srv.rooms.get(room);
   white.close();
   black.close();
   await sleep(GRACE_MS * 3);
-  assert.equal(srv.game.phase, 'lobby');
-  assert.deepEqual(srv.game.tokens, { white: null, black: null });
+  assert.equal(match.game.phase, 'lobby');
+  assert.deepEqual(match.game.tokens, { white: null, black: null });
+  assert.equal(srv.rooms.has(room), false, 'idle room is cleaned up');
 
-  const next = connect(srv.url);
+  const next = connect(srv, room);
   const a = await next.waitFor('assigned');
   assert.equal(a.color, 'w');
   const st = await next.waitFor('state');
