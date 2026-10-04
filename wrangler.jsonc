@@ -1,0 +1,31 @@
+// Cloudflare Workers config for Fog Chess (works on the free plan).
+// Local test: npx wrangler dev    Deploy: npx wrangler deploy
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fog-chess",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-10-01",
+
+  // public/ is served as static files; the Worker only runs for paths that
+  // are not files (/api/rooms, /ws).
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+
+  // One Durable Object per room code holds that match.
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "Room" }
+    ]
+  },
+
+  // The free plan needs SQLite-backed Durable Object classes.
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Room"] }
+  ],
+
+  "observability": {
+    "enabled": true
+  }
+}
