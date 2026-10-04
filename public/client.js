@@ -83,7 +83,7 @@
   // ---------- client state ----------
   // No room: nothing to connect to (the start screen is shown instead).
   var socket = ROOM
-    ? FogNet.connect((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws?room=" + ROOM,
+    ? FogNet.connect((window.GAME_SERVER || location.origin).replace(/^http/, "ws") + "/ws?room=" + ROOM,
                      { auth: handshakeAuth })
     : { on: function () {}, emit: function () {} };
   var yourColor = null;          // "w" | "b"
@@ -1126,7 +1126,7 @@
   //  START SCREEN (create a match / join with a code)
   // =====================================================================
   function createMatch(onError) {
-    fetch("/api/rooms", { method: "POST" })
+    fetch((window.GAME_SERVER || "") + "/api/rooms", { method: "POST" })
       .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
       .then(function (d) {
         if (!d || !ROOM_RE.test(d.room)) throw new Error("bad room code");

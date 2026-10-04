@@ -14,6 +14,25 @@ import roomLib from '../src/room.js';
 
 const { Room: MatchRoom, isRoomCode, newRoomCode } = roomLib;
 
+// The Pages site (fog-chess-hbi.pages.dev, plus its preview subdomains) only serves the files and uses this
+// Worker as its server; other sites may not. Browsers send Origin on fetch and WebSocket requests.
+function allowedOrigin(origin, self) {
+  if (!origin || origin === self) return true;
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
+    return protocol === 'https:' && (hostname === 'fog-chess-hbi.pages.dev' || hostname.endsWith('.fog-chess-hbi.pages.dev'));
+  } catch { return false; }
+}
+
+function withCors(response, origin) {
+  if (!origin) return response;
+  const r = new Response(response.body, response);
+  r.headers.set('Access-Control-Allow-Origin', origin);
+  r.headers.set('Vary', 'Origin');
+  return r;
+}
+
 function json(body, status) {
   return new Response(JSON.stringify(body), {
     status: status || 200,
@@ -28,10 +47,14 @@ function text(body, status) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const origin = request.headers.get('Origin');
+    if ((url.pathname.startsWith('/api/') || url.pathname === '/ws') && !allowedOrigin(origin, url.origin)) {
+      return text('Forbidden', 403);
+    }
 
     if (url.pathname === '/api/rooms') {
-      if (request.method !== 'POST') return text('Use POST', 405);
-      return json({ room: newRoomCode() });
+      if (request.method !== 'POST') return withCors(text('Use POST', 405), origin);
+      return withCors(json({ room: newRoomCode() }), origin);
     }
 
     // Only the Node server knows LAN addresses; online the page's own origin is the link.
