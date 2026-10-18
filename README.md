@@ -4,7 +4,7 @@
 
 Play online with a friend anywhere: create a match, send them the link (or let them scan the QR code), and play. It also still runs on your own computer for games on the same Wi-Fi.
 
-> **Play online:** [fog-chess-erb.pages.dev](https://fog-chess-erb.pages.dev/)
+> **Play online:** [fog-chess-game.pages.dev](https://fog-chess-game.pages.dev/)
 
 Before the game, each player secretly arranges their own army. During the game, every enemy piece shows up as the same grey token. The server knows the full board and enforces the rules. Each player only ever receives a filtered view of it.
 
