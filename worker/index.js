@@ -14,14 +14,15 @@ import roomLib from '../src/room.js';
 
 const { Room: MatchRoom, isRoomCode, newRoomCode } = roomLib;
 
-// The Pages site (fog-chess-erb.pages.dev, plus its preview subdomains) only serves the files and uses this
+// The Pages sites (fog-chess-game.pages.dev, the older fog-chess-erb.pages.dev, and their preview subdomains) only serve the files and use this
 // Worker as its server; other sites may not. Browsers send Origin on fetch and WebSocket requests.
+const SITES = ['fog-chess-game.pages.dev', 'fog-chess-erb.pages.dev'];
 function allowedOrigin(origin, self) {
   if (!origin || origin === self) return true;
   try {
     const { protocol, hostname } = new URL(origin);
     if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
-    return protocol === 'https:' && (hostname === 'fog-chess-erb.pages.dev' || hostname.endsWith('.fog-chess-erb.pages.dev'));
+    return protocol === 'https:' && SITES.some((s) => hostname === s || hostname.endsWith('.' + s));
   } catch { return false; }
 }
 
